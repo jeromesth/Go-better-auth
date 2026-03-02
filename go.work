@@ -1,0 +1,7 @@
+go 1.24.7
+
+use (
+	./packages/betterauth
+	./packages/testutil
+	./e2e
+)
