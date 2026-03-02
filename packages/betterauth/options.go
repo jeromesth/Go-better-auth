@@ -49,9 +49,9 @@ type SecondaryStorage interface {
 
 // SessionConfig configures session behavior.
 type SessionConfig struct {
-	ExpiresIn             int               // seconds, default 604800 (7 days)
-	UpdateAge             int               // seconds, default 86400 (1 day)
-	FreshAge              int               // seconds, default 86400
+	ExpiresIn             int // seconds, default 604800 (7 days)
+	UpdateAge             int // seconds, default 86400 (1 day)
+	FreshAge              int // seconds, default 86400
 	DisableSessionRefresh bool
 	CookieCache           *CookieCacheConfig
 	ModelName             string
@@ -61,8 +61,8 @@ type SessionConfig struct {
 
 // CookieCacheConfig configures cookie-based session caching.
 type CookieCacheConfig struct {
-	Enabled   bool
-	MaxAge    int // seconds
+	Enabled bool
+	MaxAge  int // seconds
 }
 
 // FieldAttribute describes a schema field for plugin/extension purposes.
@@ -101,9 +101,9 @@ type PasswordHashConfig struct {
 
 // EmailVerifConfig configures email verification behavior.
 type EmailVerifConfig struct {
-	SendOnSignUp         bool
+	SendOnSignUp                bool
 	AutoSignInAfterVerification bool
-	SendVerificationEmail func(data EmailVerificationData, r *http.Request) error
+	SendVerificationEmail       func(data EmailVerificationData, r *http.Request) error
 }
 
 // EmailVerificationData is passed to the SendVerificationEmail callback.
@@ -124,7 +124,7 @@ type UserConfig struct {
 
 // ChangeEmailConfig configures the change-email flow.
 type ChangeEmailConfig struct {
-	Enabled              bool
+	Enabled                     bool
 	SendChangeEmailVerification func(data ChangeEmailData, r *http.Request) error
 }
 
@@ -138,10 +138,10 @@ type ChangeEmailData struct {
 
 // DeleteUserConfig configures the delete-user flow.
 type DeleteUserConfig struct {
-	Enabled              bool
+	Enabled                       bool
 	SendDeleteAccountVerification func(data DeleteAccountData, r *http.Request) error
-	BeforeDelete         func(user models.User, r *http.Request) error
-	AfterDelete          func(user models.User, r *http.Request) error
+	BeforeDelete                  func(user models.User, r *http.Request) error
+	AfterDelete                   func(user models.User, r *http.Request) error
 }
 
 // DeleteAccountData is passed to the SendDeleteAccountVerification callback.
@@ -161,17 +161,17 @@ type AccountConfig struct {
 
 // AccountLinkingConfig configures account linking behavior.
 type AccountLinkingConfig struct {
-	Enabled           bool
-	TrustedProviders  []string
+	Enabled              bool
+	TrustedProviders     []string
 	AllowDifferentEmails bool
 }
 
 // RateLimitConfig configures rate limiting.
 type RateLimitConfig struct {
-	Window  int    // seconds
-	Max     int    // max requests per window
-	Storage string // "memory" or "database"
-	Enabled bool
+	Window      int    // seconds
+	Max         int    // max requests per window
+	Storage     string // "memory" or "database"
+	Enabled     bool
 	CustomRules []RateLimitRule
 }
 
@@ -204,8 +204,8 @@ type CookieAttributes struct {
 
 // CrossSubDomainCookiesConfig enables cookies shared across subdomains.
 type CrossSubDomainCookiesConfig struct {
-	Enabled        bool
-	Domain         string
+	Enabled           bool
+	Domain            string
 	AdditionalCookies []string
 }
 
@@ -224,8 +224,8 @@ func defaultOptions() BetterAuthOptions {
 		BasePath: "/api/auth",
 		Session: &SessionConfig{
 			ExpiresIn: 7 * 24 * 60 * 60, // 7 days
-			UpdateAge: 24 * 60 * 60,      // 1 day
-			FreshAge:  24 * 60 * 60,      // 1 day
+			UpdateAge: 24 * 60 * 60,     // 1 day
+			FreshAge:  24 * 60 * 60,     // 1 day
 		},
 		EmailAndPassword: &EmailPassConfig{
 			Enabled:           true,

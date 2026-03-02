@@ -12,7 +12,7 @@ import (
 
 // InternalAdapter provides typed, higher-level methods on top of the raw adapter.
 type InternalAdapter struct {
-	adp      adapter.Adapter
+	adp        adapter.Adapter
 	generateID func(model string) string
 }
 

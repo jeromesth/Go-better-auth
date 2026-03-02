@@ -11,11 +11,11 @@ import (
 )
 
 const (
-	scryptN    = 32768
-	scryptR    = 8
-	scryptP    = 1
+	scryptN      = 32768
+	scryptR      = 8
+	scryptP      = 1
 	scryptKeyLen = 32
-	saltLen    = 16
+	saltLen      = 16
 )
 
 // HashPassword hashes a plaintext password using scrypt.
