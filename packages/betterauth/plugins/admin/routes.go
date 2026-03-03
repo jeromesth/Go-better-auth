@@ -15,10 +15,10 @@ import (
 
 func (p *Plugin) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Email    string `json:"email"`
-		Password string `json:"password,omitempty"`
-		Name     string `json:"name"`
-		Role     any    `json:"role,omitempty"`
+		Email    string         `json:"email"`
+		Password string         `json:"password,omitempty"`
+		Name     string         `json:"name"`
+		Role     any            `json:"role,omitempty"`
 		Data     map[string]any `json:"data,omitempty"`
 	}
 	if !decodeJSON(w, r, &req) {
