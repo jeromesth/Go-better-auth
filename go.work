@@ -1,7 +1,8 @@
 go 1.24.7
 
 use (
+	./e2e
+	./examples/backend
 	./packages/betterauth
 	./packages/testutil
-	./e2e
 )
