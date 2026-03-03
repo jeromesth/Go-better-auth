@@ -69,7 +69,7 @@ func (a *Auth) handleSignUpEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := ia.CreateUser(ctx, req.Email, req.Name, false)
+	user, err := ia.CreateUserWithExtra(ctx, req.Email, req.Name, false, a.RunUserCreateHooks)
 	if err != nil {
 		ErrInternal.WriteJSON(w)
 		return
@@ -83,6 +83,11 @@ func (a *Auth) handleSignUpEmail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if epCfg.AutoSignIn {
+		// Run session-create hooks (e.g., ban check from admin plugin).
+		if err := a.RunSessionCreateHooks(w, r, user.ID); err != nil {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+			return
+		}
 		ip := internal.GetClientIP(r, "")
 		ua := r.UserAgent()
 		sess, err := a.sessionManager.Create(ctx, user.ID, ip, ua)

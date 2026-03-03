@@ -56,7 +56,40 @@ type PluginContext struct {
 	Tables map[string]TableSchema
 }
 
+// SessionCreateHookFn is called before a session is created.
+// If it returns a non-nil error, session creation is aborted and the error
+// message is returned to the client.
+type SessionCreateHookFn func(ctx SessionCreateContext) error
+
+// SessionCreateContext provides context for session creation hooks.
+type SessionCreateContext struct {
+	UserID  string
+	Request *http.Request
+	Writer  http.ResponseWriter
+}
+
+// UserCreateHookFn is called before a user record is created in the database.
+// It can modify the data map to add extra fields (e.g., default role).
+type UserCreateHookFn func(data map[string]any) map[string]any
+
+// SessionCreateHookProvider is implemented by plugins that need to intercept session creation.
+type SessionCreateHookProvider interface {
+	SessionCreateHooks() []SessionCreateHookFn
+}
+
+// UserCreateHookProvider is implemented by plugins that need to intercept user creation.
+type UserCreateHookProvider interface {
+	UserCreateHooks() []UserCreateHookFn
+}
+
 // -- Optional capability interfaces plugins can implement --
+
+// AuthAware is implemented by plugins that need a reference to the auth instance.
+// The auth instance is passed as `any` to avoid circular imports.
+// Plugins should type-assert to the concrete *Auth type.
+type AuthAware interface {
+	SetAuth(auth any)
+}
 
 // Initializer is implemented by plugins that need initialization.
 type Initializer interface {
