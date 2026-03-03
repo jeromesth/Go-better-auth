@@ -305,18 +305,12 @@ func (p *Plugin) handleListUsers(w http.ResponseWriter, r *http.Request) {
 		users = append(users, recordToUserWithRole(rec))
 	}
 
-	resp := map[string]any{
-		"users": users,
-		"total": total,
-	}
-	if limit > 0 {
-		resp["limit"] = limit
-	}
-	if offset > 0 {
-		resp["offset"] = offset
-	}
-
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"users":  users,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
 }
 
 // --- POST /admin/set-role ---
