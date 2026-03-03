@@ -23,6 +23,16 @@ func newInternalAdapter(adp adapter.Adapter, generateID GenerateIDFn) *InternalA
 	return &InternalAdapter{adp: adp, generateID: generateID}
 }
 
+// Adapter returns the underlying raw adapter.
+func (a *InternalAdapter) Adapter() adapter.Adapter {
+	return a.adp
+}
+
+// GenerateID generates a unique ID for the given model.
+func (a *InternalAdapter) GenerateID(model string) string {
+	return a.generateID(model)
+}
+
 // --- Users ---
 
 func (a *InternalAdapter) CreateUser(ctx context.Context, email, name string, emailVerified bool) (*models.User, error) {
@@ -39,6 +49,53 @@ func (a *InternalAdapter) CreateUser(ctx context.Context, email, name string, em
 		return nil, fmt.Errorf("creating user: %w", err)
 	}
 	return recordToUser(rec), nil
+}
+
+// CreateUserWithExtra creates a user, running the given hook on the data map before inserting.
+func (a *InternalAdapter) CreateUserWithExtra(ctx context.Context, email, name string, emailVerified bool, hookFn func(map[string]any) map[string]any) (*models.User, error) {
+	now := time.Now().UTC()
+	data := map[string]any{
+		"id":             a.generateID("user"),
+		"email":          email,
+		"name":           name,
+		"email_verified": emailVerified,
+		"created_at":     now,
+		"updated_at":     now,
+	}
+	if hookFn != nil {
+		data = hookFn(data)
+	}
+	rec, err := a.adp.Create(ctx, "user", data)
+	if err != nil {
+		return nil, fmt.Errorf("creating user: %w", err)
+	}
+	return recordToUser(rec), nil
+}
+
+// CreateUserRaw creates a user from arbitrary data and returns the raw record.
+func (a *InternalAdapter) CreateUserRaw(ctx context.Context, data map[string]any) (map[string]any, error) {
+	now := time.Now().UTC()
+	if _, ok := data["id"]; !ok {
+		data["id"] = a.generateID("user")
+	}
+	if _, ok := data["created_at"]; !ok {
+		data["created_at"] = now
+	}
+	if _, ok := data["updated_at"]; !ok {
+		data["updated_at"] = now
+	}
+	rec, err := a.adp.Create(ctx, "user", data)
+	if err != nil {
+		return nil, fmt.Errorf("creating user: %w", err)
+	}
+	return rec, nil
+}
+
+// FindUserByIDRaw returns the raw user record including plugin-added fields.
+func (a *InternalAdapter) FindUserByIDRaw(ctx context.Context, id string) (map[string]any, error) {
+	return a.adp.FindOne(ctx, "user", adapter.Query{
+		Where: []adapter.Where{adapter.EQ("id", id)},
+	})
 }
 
 func (a *InternalAdapter) FindUserByEmail(ctx context.Context, email string) (*models.User, error) {
@@ -78,10 +135,64 @@ func (a *InternalAdapter) UpdateUser(ctx context.Context, id string, data map[st
 	return recordToUser(rec), nil
 }
 
+// UpdateUserRaw updates a user and returns the raw record.
+func (a *InternalAdapter) UpdateUserRaw(ctx context.Context, id string, data map[string]any) (map[string]any, error) {
+	data["updated_at"] = time.Now().UTC()
+	return a.adp.Update(ctx, "user", adapter.Query{
+		Where: []adapter.Where{adapter.EQ("id", id)},
+	}, data)
+}
+
 func (a *InternalAdapter) DeleteUser(ctx context.Context, id string) error {
+	// Delete accounts for this user first.
+	_ = a.adp.DeleteMany(ctx, "account", adapter.Query{
+		Where: []adapter.Where{adapter.EQ("user_id", id)},
+	})
+	// Delete sessions for this user.
+	_ = a.adp.DeleteMany(ctx, "session", adapter.Query{
+		Where: []adapter.Where{adapter.EQ("user_id", id)},
+	})
 	return a.adp.Delete(ctx, "user", adapter.Query{
 		Where: []adapter.Where{adapter.EQ("id", id)},
 	})
+}
+
+// ListUsers returns users matching the query criteria.
+func (a *InternalAdapter) ListUsers(ctx context.Context, q adapter.Query) ([]map[string]any, error) {
+	return a.adp.FindMany(ctx, "user", q)
+}
+
+// CountUsers returns the total count of users matching the where clause.
+func (a *InternalAdapter) CountUsers(ctx context.Context, where []adapter.Where) (int64, error) {
+	return a.adp.Count(ctx, "user", adapter.Query{Where: where})
+}
+
+// UpdatePassword updates the password hash for a user's credential account.
+func (a *InternalAdapter) UpdatePassword(ctx context.Context, userID, hashedPassword string) error {
+	acc, err := a.adp.FindOne(ctx, "account", adapter.Query{
+		Where: []adapter.Where{
+			adapter.EQ("user_id", userID),
+			adapter.EQ("provider_id", "credential"),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("finding credential account: %w", err)
+	}
+	if acc == nil {
+		// Create a credential account if none exists.
+		_, err = a.CreateAccount(ctx, userID, userID, "credential", map[string]any{
+			"password": hashedPassword,
+		})
+		return err
+	}
+	accID, _ := acc["id"].(string)
+	_, err = a.adp.Update(ctx, "account", adapter.Query{
+		Where: []adapter.Where{adapter.EQ("id", accID)},
+	}, map[string]any{
+		"password":   hashedPassword,
+		"updated_at": time.Now().UTC(),
+	})
+	return err
 }
 
 // --- Accounts ---

@@ -17,13 +17,15 @@ import (
 // Auth is the main entry point for go-better-auth.
 // Create one with New() and mount its Handler() on your HTTP server.
 type Auth struct {
-	opts            BetterAuthOptions
-	internalAdapter *InternalAdapter
-	sessionManager  *session.Manager
-	stateStore      *oauth.StateStore
-	rateLimiter     *ratelimit.Limiter
-	socialProviders map[string]social.SocialProvider
-	handler         http.Handler
+	opts               BetterAuthOptions
+	internalAdapter    *InternalAdapter
+	sessionManager     *session.Manager
+	stateStore         *oauth.StateStore
+	rateLimiter        *ratelimit.Limiter
+	socialProviders    map[string]social.SocialProvider
+	handler            http.Handler
+	sessionCreateHooks []plugin.SessionCreateHookFn
+	userCreateHooks    []plugin.UserCreateHookFn
 }
 
 // New creates a new Auth instance with the provided options.
@@ -88,6 +90,23 @@ func New(opts BetterAuthOptions) *Auth {
 		"apple":  social.Apple{},
 	}
 
+	// Pass auth reference to AuthAware plugins before initialization.
+	for _, p := range opts.Plugins {
+		if aware, ok := p.(plugin.AuthAware); ok {
+			aware.SetAuth(a)
+		}
+	}
+
+	// Collect plugin hooks.
+	for _, p := range opts.Plugins {
+		if sh, ok := p.(plugin.SessionCreateHookProvider); ok {
+			a.sessionCreateHooks = append(a.sessionCreateHooks, sh.SessionCreateHooks()...)
+		}
+		if uh, ok := p.(plugin.UserCreateHookProvider); ok {
+			a.userCreateHooks = append(a.userCreateHooks, uh.UserCreateHooks()...)
+		}
+	}
+
 	// Initialize plugins.
 	for _, p := range opts.Plugins {
 		if init, ok := p.(plugin.Initializer); ok {
@@ -104,6 +123,29 @@ func New(opts BetterAuthOptions) *Auth {
 	}
 
 	return a
+}
+
+// RunSessionCreateHooks runs all registered session-create hooks.
+// Returns an error if any hook rejects the session creation.
+func (a *Auth) RunSessionCreateHooks(w http.ResponseWriter, r *http.Request, userID string) error {
+	for _, hook := range a.sessionCreateHooks {
+		if err := hook(plugin.SessionCreateContext{
+			UserID:  userID,
+			Request: r,
+			Writer:  w,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RunUserCreateHooks runs all registered user-create hooks on the data map.
+func (a *Auth) RunUserCreateHooks(data map[string]any) map[string]any {
+	for _, hook := range a.userCreateHooks {
+		data = hook(data)
+	}
+	return data
 }
 
 // buildRouter creates the HTTP mux with all auth endpoints registered.

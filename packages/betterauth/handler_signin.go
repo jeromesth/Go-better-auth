@@ -79,6 +79,12 @@ func (a *Auth) handleSignInEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Run session-create hooks (e.g., ban check from admin plugin).
+	if err := a.RunSessionCreateHooks(w, r, user.ID); err != nil {
+		writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+		return
+	}
+
 	ip := internal.GetClientIP(r, "")
 	ua := r.UserAgent()
 	sess, err := a.sessionManager.Create(ctx, user.ID, ip, ua)

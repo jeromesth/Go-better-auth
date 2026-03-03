@@ -56,6 +56,48 @@ func (m *Manager) Create(ctx context.Context, userID, ipAddress, userAgent strin
 	return recordToSession(rec), nil
 }
 
+// CreateWithExtra creates a new session with additional fields (e.g., impersonatedBy).
+func (m *Manager) CreateWithExtra(ctx context.Context, userID, ipAddress, userAgent string, extra map[string]any) (*models.Session, error) {
+	token, err := crypto.GenerateSessionToken()
+	if err != nil {
+		return nil, fmt.Errorf("generating session token: %w", err)
+	}
+
+	now := time.Now().UTC()
+	expiresAt := now.Add(m.expiresIn)
+	if v, ok := extra["expires_at"].(time.Time); ok {
+		expiresAt = v
+		delete(extra, "expires_at")
+	}
+
+	sess := map[string]any{
+		"id":         internal.NewID(),
+		"token":      token,
+		"user_id":    userID,
+		"expires_at": expiresAt,
+		"ip_address": ipAddress,
+		"user_agent": userAgent,
+		"created_at": now,
+		"updated_at": now,
+	}
+	for k, v := range extra {
+		sess[k] = v
+	}
+
+	rec, err := m.adapter.Create(ctx, modelSession, sess)
+	if err != nil {
+		return nil, fmt.Errorf("creating session: %w", err)
+	}
+	return recordToSession(rec), nil
+}
+
+// DeleteAllForUser deletes all sessions for the given user.
+func (m *Manager) DeleteAllForUser(ctx context.Context, userID string) error {
+	return m.adapter.DeleteMany(ctx, modelSession, adapter.Query{
+		Where: []adapter.Where{adapter.EQ("user_id", userID)},
+	})
+}
+
 // FindByToken retrieves a session by its token.
 func (m *Manager) FindByToken(ctx context.Context, token string) (*models.Session, error) {
 	rec, err := m.adapter.FindOne(ctx, modelSession, adapter.Query{
