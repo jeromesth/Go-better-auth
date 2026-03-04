@@ -70,6 +70,7 @@ type SessionWithImpersonation struct {
 type Plugin struct {
 	opts *Options
 	auth *betterauth.Auth
+	repo *repository
 }
 
 // New creates a new admin plugin with the given options.
@@ -102,6 +103,7 @@ func (p *Plugin) ID() string { return "admin" }
 
 func (p *Plugin) SetAuth(auth any) {
 	p.auth = auth.(*betterauth.Auth)
+	p.repo = newRepository(p.auth)
 }
 
 // Schema returns the database schema extensions for the admin plugin.
@@ -149,7 +151,7 @@ func (p *Plugin) checkBanOnSessionCreate(scc plugin.SessionCreateContext) error 
 		ctx = scc.Request.Context()
 	}
 
-	rec, err := p.auth.InternalAdapter().FindUserByIDRaw(ctx, scc.UserID)
+	rec, err := p.repo.FindUserByID(ctx, scc.UserID)
 	if err != nil || rec == nil {
 		return nil
 	}
@@ -163,7 +165,7 @@ func (p *Plugin) checkBanOnSessionCreate(scc plugin.SessionCreateContext) error 
 	if banExpires, ok := rec["ban_expires"].(time.Time); ok && !banExpires.IsZero() {
 		if time.Now().UTC().After(banExpires) {
 			// Ban expired, unban the user.
-			_, _ = p.auth.InternalAdapter().UpdateUserRaw(ctx, scc.UserID, map[string]any{
+			_, _ = p.repo.UpdateUser(ctx, scc.UserID, map[string]any{
 				"banned":      false,
 				"ban_reason":  nil,
 				"ban_expires": nil,
@@ -218,13 +220,13 @@ func (p *Plugin) getAdminSession(w http.ResponseWriter, r *http.Request) *UserWi
 	}
 
 	ctx := r.Context()
-	sess, err := p.auth.SessionManager().FindByToken(ctx, token)
+	sess, err := p.repo.FindSessionByToken(ctx, token)
 	if err != nil || sess == nil || session.IsExpired(sess) {
 		writeAdminError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
 		return nil
 	}
 
-	rec, err := p.auth.InternalAdapter().FindUserByIDRaw(ctx, sess.UserID)
+	rec, err := p.repo.FindUserByID(ctx, sess.UserID)
 	if err != nil || rec == nil {
 		writeAdminError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
 		return nil

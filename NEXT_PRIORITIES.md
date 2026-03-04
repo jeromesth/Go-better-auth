@@ -257,6 +257,55 @@ auth := betterauth.New(betterauth.BetterAuthOptions{
 
 This is a **food-for-thought** item — not a priority for the next sprint, but worth designing the interface now so plugins use it instead of rolling their own permission checks.
 
+### Implementation Roadmap: RBAC Authorization Adapters
+
+**Current state**: The admin and organization plugins use a built-in RBAC system (`Statements`, `Role`, `HasPermission`) that is zero-dependency and covers most use cases. This remains the default.
+
+**Future direction**: Keep the built-in RBAC as the zero-dependency default, while offering optional adapter packages for advanced authorization engines.
+
+#### Tier 1: Casbin Adapter (Medium Priority)
+
+The clear #1 choice for users who need flexible, config-driven RBAC/ABAC:
+- **19.9k GitHub stars**, 1,700+ dependent Go packages
+- Native Go library (embeddable, minimal dependency footprint)
+- 50+ storage adapters (Postgres, MySQL, Redis, GORM, etc.)
+- Middleware for Gin, Echo, Chi, go-kit, and more
+- API maps directly to our pattern: `e.Enforce(subject, resource, action)` ≈ `HasPermission(role, resource, action)`
+- Model-agnostic — users can evolve from RBAC to ABAC without code changes
+
+#### Tier 2: OpenFGA Adapter (Low Priority)
+
+For enterprise users who need Zanzibar-style relationship-based access control:
+- CNCF Incubating project, backed by Auth0/Okta
+- Relationship tuples: `(user, relation, object)` model
+- Ideal for complex permission hierarchies (org → team → project → document)
+- Can be embedded as a Go library with in-memory/SQLite backends
+- Heavier dependency than Casbin
+
+#### Not Recommended as Adapters
+
+- **OPA**: Heavy dependency footprint, Rego learning curve — only for users already using OPA in their infrastructure
+- **SpiceDB/Permify**: Services, not libraries — users should integrate at the application level
+- **goRBAC**: Not actively maintained, our built-in RBAC is already equivalent
+- **Oso**: Deprecated
+
+#### Proposed Interface
+
+```go
+// Authorizer defines the external authorization adapter interface.
+type Authorizer interface {
+    Can(ctx context.Context, subject, action, resource string) (bool, error)
+    CanWithContext(ctx context.Context, subject, action, resource string, attrs map[string]any) (bool, error)
+}
+```
+
+#### Implementation Approach
+
+1. Define the `Authorizer` interface in the core package
+2. Optional adapter packages (`authz/casbin/`, `authz/openfga/`) — imported only when needed
+3. Admin and organization plugins accept an optional `Authorizer` — when nil, use the built-in RBAC
+4. Zero dependency overhead for users who don't need external authorization engines
+
 ---
 
 ## Gap Analysis: Go Port vs TypeScript better-auth

@@ -47,9 +47,8 @@ func (p *Plugin) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	ia := p.auth.InternalAdapter()
 
-	existing, err := ia.FindUserByEmail(ctx, email)
+	existing, err := p.repo.FindUserByEmail(ctx, email)
 	if err != nil {
 		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error")
 		return
@@ -78,7 +77,7 @@ func (p *Plugin) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		data[k] = v
 	}
 
-	rec, err := ia.CreateUserRaw(ctx, data)
+	rec, err := p.repo.CreateUser(ctx, data)
 	if err != nil {
 		writeAdminError(w, ErrFailedToCreateUser.Status, ErrFailedToCreateUser.Code, ErrFailedToCreateUser.Message)
 		return
@@ -92,9 +91,7 @@ func (p *Plugin) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		userID, _ := rec["id"].(string)
-		if _, err := ia.CreateAccount(ctx, userID, userID, "credential", map[string]any{
-			"password": hash,
-		}); err != nil {
+		if err := p.repo.CreateCredentialAccount(ctx, userID, hash); err != nil {
 			writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create account")
 			return
 		}
@@ -130,7 +127,7 @@ func (p *Plugin) handleGetUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	rec, err := p.auth.InternalAdapter().FindUserByIDRaw(ctx, id)
+	rec, err := p.repo.FindUserByID(ctx, id)
 	if err != nil {
 		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error")
 		return
@@ -200,7 +197,7 @@ func (p *Plugin) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	rec, err := p.auth.InternalAdapter().UpdateUserRaw(ctx, req.UserID, req.Data)
+	rec, err := p.repo.UpdateUser(ctx, req.UserID, req.Data)
 	if err != nil {
 		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error")
 		return
@@ -276,7 +273,6 @@ func (p *Plugin) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	sortDir := q.Get("sortDirection")
 
 	ctx := r.Context()
-	ia := p.auth.InternalAdapter()
 
 	query := adapter.Query{
 		Where:   where,
@@ -286,7 +282,7 @@ func (p *Plugin) handleListUsers(w http.ResponseWriter, r *http.Request) {
 		SortDir: sortDir,
 	}
 
-	recs, err := ia.ListUsers(ctx, query)
+	recs, err := p.repo.ListUsers(ctx, query)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"users": []any{},
@@ -295,7 +291,7 @@ func (p *Plugin) handleListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	total, err := ia.CountUsers(ctx, where)
+	total, err := p.repo.CountUsers(ctx, where)
 	if err != nil {
 		total = int64(len(recs))
 	}
@@ -353,7 +349,7 @@ func (p *Plugin) handleSetRole(w http.ResponseWriter, r *http.Request) {
 	roleStr := parseRoles(req.Role)
 
 	ctx := r.Context()
-	rec, err := p.auth.InternalAdapter().UpdateUserRaw(ctx, req.UserID, map[string]any{
+	rec, err := p.repo.UpdateUser(ctx, req.UserID, map[string]any{
 		"role": roleStr,
 	})
 	if err != nil {
@@ -425,7 +421,7 @@ func (p *Plugin) handleSetUserPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	if err := p.auth.InternalAdapter().UpdatePassword(ctx, req.UserID, hash); err != nil {
+	if err := p.repo.UpdatePassword(ctx, req.UserID, hash); err != nil {
 		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update password")
 		return
 	}
@@ -464,15 +460,14 @@ func (p *Plugin) handleRemoveUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	ia := p.auth.InternalAdapter()
 
-	target, err := ia.FindUserByID(ctx, req.UserID)
+	target, err := p.repo.FindUserByID(ctx, req.UserID)
 	if err != nil || target == nil {
 		writeAdminError(w, http.StatusNotFound, "USER_NOT_FOUND", "User not found")
 		return
 	}
 
-	if err := ia.DeleteUser(ctx, req.UserID); err != nil {
+	if err := p.repo.DeleteUser(ctx, req.UserID); err != nil {
 		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete user")
 		return
 	}
@@ -508,10 +503,9 @@ func (p *Plugin) handleBanUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	ia := p.auth.InternalAdapter()
 
 	// Check user exists.
-	target, err := ia.FindUserByIDRaw(ctx, req.UserID)
+	target, err := p.repo.FindUserByID(ctx, req.UserID)
 	if err != nil || target == nil {
 		writeAdminError(w, http.StatusNotFound, "USER_NOT_FOUND", "User not found")
 		return
@@ -538,14 +532,14 @@ func (p *Plugin) handleBanUser(w http.ResponseWriter, r *http.Request) {
 		updates["ban_expires"] = time.Now().UTC().Add(time.Duration(p.opts.DefaultBanExpiresIn) * time.Second)
 	}
 
-	rec, err := ia.UpdateUserRaw(ctx, req.UserID, updates)
+	rec, err := p.repo.UpdateUser(ctx, req.UserID, updates)
 	if err != nil {
 		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to ban user")
 		return
 	}
 
 	// Revoke all sessions.
-	_ = p.auth.SessionManager().DeleteAllForUser(ctx, req.UserID)
+	_ = p.repo.RevokeAllUserSessions(ctx, req.UserID)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user": recordToUserWithRole(rec),
@@ -578,7 +572,7 @@ func (p *Plugin) handleUnbanUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	rec, err := p.auth.InternalAdapter().UpdateUserRaw(ctx, req.UserID, map[string]any{
+	rec, err := p.repo.UpdateUser(ctx, req.UserID, map[string]any{
 		"banned":      false,
 		"ban_expires": nil,
 		"ban_reason":  nil,
@@ -619,9 +613,7 @@ func (p *Plugin) handleListUserSessions(w http.ResponseWriter, r *http.Request) 
 	}
 
 	ctx := r.Context()
-	recs, err := p.auth.InternalAdapter().Adapter().FindMany(ctx, "session", adapter.Query{
-		Where: []adapter.Where{adapter.EQ("user_id", req.UserID)},
-	})
+	recs, err := p.repo.FindSessionsByUserID(ctx, req.UserID)
 	if err != nil {
 		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list sessions")
 		return
@@ -661,7 +653,7 @@ func (p *Plugin) handleRevokeUserSession(w http.ResponseWriter, r *http.Request)
 	}
 
 	ctx := r.Context()
-	if err := p.auth.SessionManager().Revoke(ctx, req.SessionToken); err != nil {
+	if err := p.repo.RevokeSession(ctx, req.SessionToken); err != nil {
 		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to revoke session")
 		return
 	}
@@ -695,7 +687,7 @@ func (p *Plugin) handleRevokeUserSessions(w http.ResponseWriter, r *http.Request
 	}
 
 	ctx := r.Context()
-	if err := p.auth.SessionManager().DeleteAllForUser(ctx, req.UserID); err != nil {
+	if err := p.repo.RevokeAllUserSessions(ctx, req.UserID); err != nil {
 		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to revoke sessions")
 		return
 	}
@@ -729,7 +721,7 @@ func (p *Plugin) handleImpersonateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	targetRec, err := p.auth.InternalAdapter().FindUserByIDRaw(ctx, req.UserID)
+	targetRec, err := p.repo.FindUserByID(ctx, req.UserID)
 	if err != nil || targetRec == nil {
 		writeAdminError(w, http.StatusNotFound, "USER_NOT_FOUND", "User not found")
 		return
@@ -758,10 +750,7 @@ func (p *Plugin) handleImpersonateUser(w http.ResponseWriter, r *http.Request) {
 	duration := time.Duration(p.opts.ImpersonationSessionDuration) * time.Second
 	expiresAt := time.Now().UTC().Add(duration)
 
-	sess, err := p.auth.SessionManager().CreateWithExtra(ctx, targetUser.ID, "", "", map[string]any{
-		"impersonated_by": adminUser.ID,
-		"expires_at":      expiresAt,
-	})
+	sess, err := p.repo.CreateImpersonationSession(ctx, targetUser.ID, adminUser.ID, expiresAt)
 	if err != nil {
 		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create impersonation session")
 		return
@@ -796,16 +785,14 @@ func (p *Plugin) handleStopImpersonating(w http.ResponseWriter, r *http.Request)
 	}
 
 	ctx := r.Context()
-	sess, err := p.auth.SessionManager().FindByToken(ctx, token)
+	sess, err := p.repo.FindSessionByToken(ctx, token)
 	if err != nil || sess == nil || session.IsExpired(sess) {
 		writeAdminError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
 		return
 	}
 
 	// Find the impersonated_by field from raw session record.
-	rawSess, err := p.auth.InternalAdapter().Adapter().FindOne(ctx, "session", adapter.Query{
-		Where: []adapter.Where{adapter.EQ("token", token)},
-	})
+	rawSess, err := p.repo.FindRawSession(ctx, token)
 	if err != nil || rawSess == nil {
 		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to find session")
 		return
@@ -818,7 +805,7 @@ func (p *Plugin) handleStopImpersonating(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Find the admin user.
-	adminRec, err := p.auth.InternalAdapter().FindUserByIDRaw(ctx, impersonatedBy)
+	adminRec, err := p.repo.FindUserByID(ctx, impersonatedBy)
 	if err != nil || adminRec == nil {
 		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to find admin user")
 		return
@@ -831,14 +818,14 @@ func (p *Plugin) handleStopImpersonating(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	adminSession, err := p.auth.SessionManager().FindByToken(ctx, adminCookie.Value)
+	adminSession, err := p.repo.FindSessionByToken(ctx, adminCookie.Value)
 	if err != nil || adminSession == nil {
 		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to find admin session")
 		return
 	}
 
 	// Delete the impersonation session.
-	_ = p.auth.SessionManager().Revoke(ctx, token)
+	_ = p.repo.RevokeSession(ctx, token)
 
 	// Restore the admin session cookie.
 	session.SetSessionCookie(w, adminSession.Token, adminSession.ExpiresAt, p.auth.Options().Advanced != nil && p.auth.Options().Advanced.UseSecureCookies)
@@ -881,9 +868,9 @@ func (p *Plugin) handleHasPermission(w http.ResponseWriter, r *http.Request) {
 
 	if token != "" {
 		ctx := r.Context()
-		sess, err := p.auth.SessionManager().FindByToken(ctx, token)
+		sess, err := p.repo.FindSessionByToken(ctx, token)
 		if err == nil && sess != nil && !session.IsExpired(sess) {
-			rec, err := p.auth.InternalAdapter().FindUserByIDRaw(ctx, sess.UserID)
+			rec, err := p.repo.FindUserByID(ctx, sess.UserID)
 			if err == nil && rec != nil {
 				sessionUser = recordToUserWithRole(rec)
 			}
@@ -908,7 +895,7 @@ func (p *Plugin) handleHasPermission(w http.ResponseWriter, r *http.Request) {
 	} else if req.UserID != "" {
 		// Look up the user.
 		ctx := r.Context()
-		rec, err := p.auth.InternalAdapter().FindUserByIDRaw(ctx, req.UserID)
+		rec, err := p.repo.FindUserByID(ctx, req.UserID)
 		if err != nil || rec == nil {
 			writeAdminError(w, http.StatusBadRequest, "BAD_REQUEST", "user not found")
 			return
