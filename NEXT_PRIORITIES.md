@@ -21,6 +21,293 @@
 
 ---
 
+## PR Feedback: Structural Issues to Address Before Next Feature Work
+
+### 1. Package Naming & Folder Structure
+
+**Current problem**: Import paths are verbose and stutter:
+```go
+import betterauth "github.com/jeromesth/go-better-auth/packages/betterauth"
+import "github.com/jeromesth/go-better-auth/packages/betterauth/plugins/admin"
+```
+
+The `packages/betterauth/` nesting serves no purpose and creates confusion with the existing TypeScript `better-auth` library name.
+
+#### Recommended new structure
+
+Rename the module from `packages/betterauth` to a short, clear Go module name. Two options:
+
+**Option A — Flat module (recommended for Go libraries)**:
+```
+go-better-auth/
+├── auth.go                     # package betterauth (root = the library)
+├── adapter/
+│   ├── adapter.go
+│   ├── memory/
+│   └── sqlx/                   # future
+├── crypto/
+├── session/
+├── social/
+├── oauth/
+├── plugin/
+├── plugins/
+│   ├── admin/
+│   └── organization/
+├── models/
+├── ratelimit/
+├── internal/
+├── cmd/                        # future CLI tools
+├── examples/
+│   └── backend/
+├── e2e/
+└── docs/
+```
+
+Import paths become clean:
+```go
+import "github.com/jeromesth/go-better-auth"
+import "github.com/jeromesth/go-better-auth/plugins/admin"
+import "github.com/jeromesth/go-better-auth/adapter/memory"
+```
+
+**Option B — Keep `packages/` but rename inner dir**:
+```
+packages/auth/          (module: github.com/jeromesth/go-better-auth/packages/auth)
+packages/testutil/
+```
+
+**Recommendation**: Option A. The `packages/` directory is not a Go convention — it comes from the TypeScript monorepo world. In Go, the repository root *is* the package. Major Go projects (kubernetes, docker, terraform, chi, echo) all put their main package at the root.
+
+### 2. The `src/` Question
+
+**No — Go projects do not use `src/`**. This is explicitly discouraged by the Go community.
+
+The `$GOPATH` workspace has a `src/` directory, but individual projects never create one. The Go team (Russ Cox specifically) has stated that even `cmd/`, `pkg/`, `docs/` are not required standard directories — the simpler the better.
+
+What Go **does** use:
+- **`internal/`** — Private packages (enforced by the Go toolchain — other modules literally cannot import from it)
+- **`cmd/`** — Entry points for multiple binaries
+- **`testdata/`** — Test fixtures (ignored by Go toolchain)
+
+Reference: [Official Go module layout guide](https://go.dev/doc/modules/layout)
+
+### 3. Test File Standards
+
+**Go has strict, non-negotiable conventions for test files:**
+
+| Rule | Convention |
+|------|-----------|
+| **File suffix** | `_test.go` (NOT `.test.go`) — this is enforced by `go test` |
+| **Placement** | Same directory as the code being tested |
+| **Package name** | Same package (white-box) OR `package foo_test` (black-box) |
+| **No test code in non-test files** | Test helpers, assertions, mocks — all go in `_test.go` files |
+| **Test function names** | `func TestXxx(t *testing.T)` — prefix must be `Test` |
+
+**Audit result**: The current codebase is actually clean — no test code is mixed into non-test files. All test functions are properly in `_test.go` files. The concern may have come from seeing `access.go` alongside `admin_test.go` — but `access.go` is production RBAC code, not test code.
+
+**Current test file layout (correct)**:
+```
+admin/
+├── access.go        ← Production RBAC logic (Statements, Roles, HasPermission)
+├── admin.go         ← Plugin struct, Options, New(), Schema(), Endpoints()
+├── admin_test.go    ← Tests for all of the above
+├── errors.go        ← Error constants
+└── routes.go        ← HTTP handlers
+```
+
+**One improvement**: For large plugins, split tests by concern:
+```
+admin/
+├── ...
+├── admin_test.go        ← Core plugin tests
+├── access_test.go       ← RBAC/permission unit tests
+└── routes_test.go       ← HTTP handler integration tests
+```
+
+---
+
+## PR Feedback: Organization Plugin Structural Issues
+
+### 4. Missing: `access/statement.ts` Equivalent
+
+The Go org plugin has `access.go` which **does** contain the statement-based RBAC equivalent:
+- `Statements` type (map of resource → actions)
+- `Role` struct with `Authorize()` method
+- `DefaultStatements` and `DefaultRoles()`
+- `HasPermission()` and `CanManageRole()`
+
+**However**, compared to the TypeScript version, it's **missing**:
+- **Dynamic access control** — loading roles from the DB at runtime (the TS version has `crud-access-control.ts` with CRUD endpoints for org roles)
+- **Permission caching** — the TS `has-permission.ts` caches resolved roles in memory
+- **Team permissions** — the TS `defaultStatements` includes `team` and `ac` resources
+
+**Recommendation**: The `access.go` file is a good start but should be expanded. Consider splitting into an `access/` subdirectory once dynamic AC is added:
+```
+organization/
+├── access/
+│   ├── statement.go         # DefaultStatements, DefaultRoles
+│   └── resolver.go          # Dynamic role resolution + caching
+```
+
+### 5. Route Splitting — Yes, Absolutely Do This
+
+The current `routes.go` is **1,353 lines** with 21 handler functions. The TypeScript version splits by entity domain:
+
+| TypeScript File | Handlers |
+|----------------|----------|
+| `crud-org.ts` | createOrganization, updateOrganization, deleteOrganization, setActive, getFullOrganization, listOrganizations, checkSlug |
+| `crud-members.ts` | addMember, removeMember, updateMemberRole, leaveOrganization, listMembers, getActiveMember |
+| `crud-invites.ts` | createInvitation, acceptInvitation, rejectInvitation, cancelInvitation, getInvitation, listInvitations |
+| `crud-team.ts` | (future) team management |
+| `crud-access-control.ts` | (future) dynamic role CRUD |
+
+**This is perfectly valid and encouraged in Go.** Multiple files in the same directory share the same package. Go doesn't care how you split files within a package — it's one compilation unit.
+
+**Recommended Go equivalent**:
+```
+organization/
+├── routes_org.go            # Organization CRUD handlers
+├── routes_members.go        # Member management handlers
+├── routes_invitations.go    # Invitation handlers
+├── routes_teams.go          # (future) Team handlers
+├── routes_access_control.go # (future) Dynamic role CRUD
+```
+
+### 6. Adapter/Repository Pattern — Separate DB Calls
+
+The TypeScript version has a dedicated `adapter.ts` with 40+ named query functions. Route handlers never call the DB directly — they go through the adapter layer.
+
+Our Go org plugin currently calls `p.auth.InternalAdapter().FindOne(...)` directly in every handler.
+
+**Recommendation**: Create a `repository.go` (or `adapter.go`) that encapsulates all DB operations:
+
+```go
+// organization/repository.go
+package organization
+
+type repository struct {
+    adapter adapter.Adapter
+}
+
+func (r *repository) FindOrganizationBySlug(ctx context.Context, slug string) (*Organization, error) { ... }
+func (r *repository) CreateMember(ctx context.Context, m *Member) (*Member, error) { ... }
+func (r *repository) ListPendingInvitations(ctx context.Context, orgID string) ([]*Invitation, error) { ... }
+// ... etc
+```
+
+Benefits:
+- Route handlers become shorter and more readable
+- DB logic is independently testable
+- Easier to optimize queries later without touching handler logic
+
+### 7. Utility Separation — `has_permission.go`
+
+The TypeScript version has a dedicated `has-permission.ts` file. Our `access.go` combines Statements, Roles, and HasPermission in one file. This works fine at current size (109 lines), but as dynamic access control is added, splitting makes sense:
+
+```
+organization/
+├── access.go            # Statements type, Role struct, DefaultStatements, DefaultRoles
+├── has_permission.go    # HasPermission(), CanManageRole(), permission resolution logic
+```
+
+---
+
+## RBAC Libraries in Go (CASL Equivalent)
+
+### Top Contenders
+
+| Library | GitHub Stars | Model | Architecture | Best For |
+|---------|-------------|-------|-------------|----------|
+| **[Casbin](https://github.com/casbin/casbin)** | 18k+ | ACL/RBAC/ABAC | Embedded library (stateless) | Flexible in-app authorization, config-driven policies |
+| **[OpenFGA](https://github.com/openfga/openfga)** | 3k+ | ReBAC (Zanzibar) | Centralized engine | Relationship-based permissions, distributed systems |
+| **[Permify](https://github.com/Permify/permify)** | 5k+ | ReBAC/RBAC/ABAC | Centralized service | Google Zanzibar-inspired, gRPC-first |
+| **[Oso / Polar](https://github.com/osohq/oso)** | 3.4k+ | Policy language | Embedded library | Declarative policies, complex business rules |
+
+### Comparison to CASL
+
+CASL is an isomorphic JS library for **attribute-based access control** that defines abilities as `can(action, subject, conditions)`. The closest Go equivalents:
+
+- **Casbin** is the most direct analog — it's an embedded library (not a service), supports RBAC/ABAC/ACL via config files, and has 16+ language SDKs. It uses a PERM metamodel similar to CASL's ability definitions.
+- **OpenFGA** is more powerful but heavier — it's a full authorization engine you run as a service, inspired by Google's Zanzibar. Overkill for simple RBAC but great for complex relationship-based permissions.
+
+### Adapter Pattern Recommendation
+
+Rather than hard-coupling to any RBAC library, we could define a simple `Authorizer` interface:
+
+```go
+// plugin/authz.go
+type Authorizer interface {
+    // Can checks if subject can perform action on resource
+    Can(ctx context.Context, subject string, action string, resource string) (bool, error)
+}
+```
+
+Then provide optional adapters:
+```go
+import "github.com/jeromesth/go-better-auth/authz/casbinadapter"
+import "github.com/jeromesth/go-better-auth/authz/openfgaadapter"
+
+// Users bring their own:
+auth := betterauth.New(betterauth.BetterAuthOptions{
+    Authorizer: casbinadapter.New(enforcer),
+    // OR
+    Authorizer: openfgaadapter.New(client),
+})
+```
+
+This is a **food-for-thought** item — not a priority for the next sprint, but worth designing the interface now so plugins use it instead of rolling their own permission checks.
+
+### Implementation Roadmap: RBAC Authorization Adapters
+
+**Current state**: The admin and organization plugins use a built-in RBAC system (`Statements`, `Role`, `HasPermission`) that is zero-dependency and covers most use cases. This remains the default.
+
+**Future direction**: Keep the built-in RBAC as the zero-dependency default, while offering optional adapter packages for advanced authorization engines.
+
+#### Tier 1: Casbin Adapter (Medium Priority)
+
+The clear #1 choice for users who need flexible, config-driven RBAC/ABAC:
+- **19.9k GitHub stars**, 1,700+ dependent Go packages
+- Native Go library (embeddable, minimal dependency footprint)
+- 50+ storage adapters (Postgres, MySQL, Redis, GORM, etc.)
+- Middleware for Gin, Echo, Chi, go-kit, and more
+- API maps directly to our pattern: `e.Enforce(subject, resource, action)` ≈ `HasPermission(role, resource, action)`
+- Model-agnostic — users can evolve from RBAC to ABAC without code changes
+
+#### Tier 2: OpenFGA Adapter (Low Priority)
+
+For enterprise users who need Zanzibar-style relationship-based access control:
+- CNCF Incubating project, backed by Auth0/Okta
+- Relationship tuples: `(user, relation, object)` model
+- Ideal for complex permission hierarchies (org → team → project → document)
+- Can be embedded as a Go library with in-memory/SQLite backends
+- Heavier dependency than Casbin
+
+#### Not Recommended as Adapters
+
+- **OPA**: Heavy dependency footprint, Rego learning curve — only for users already using OPA in their infrastructure
+- **SpiceDB/Permify**: Services, not libraries — users should integrate at the application level
+- **goRBAC**: Not actively maintained, our built-in RBAC is already equivalent
+- **Oso**: Deprecated
+
+#### Proposed Interface
+
+```go
+// Authorizer defines the external authorization adapter interface.
+type Authorizer interface {
+    Can(ctx context.Context, subject, action, resource string) (bool, error)
+    CanWithContext(ctx context.Context, subject, action, resource string, attrs map[string]any) (bool, error)
+}
+```
+
+#### Implementation Approach
+
+1. Define the `Authorizer` interface in the core package
+2. Optional adapter packages (`authz/casbin/`, `authz/openfga/`) — imported only when needed
+3. Admin and organization plugins accept an optional `Authorizer` — when nil, use the built-in RBAC
+4. Zero dependency overhead for users who don't need external authorization engines
+
+---
+
 ## Gap Analysis: Go Port vs TypeScript better-auth
 
 ### Authentication Providers
@@ -94,8 +381,6 @@
 | In-Memory | ✅ | ✅ |
 
 ### Framework Integrations (Go-Relevant)
-The TypeScript version integrates with Next.js, Nuxt, SvelteKit, Hono, Express, Fastify, etc. For Go, the relevant equivalents are:
-
 | Framework | Status |
 |-----------|--------|
 | net/http (stdlib) | ✅ Works natively |
@@ -109,93 +394,35 @@ The TypeScript version integrates with Next.js, Nuxt, SvelteKit, Hono, Express, 
 
 ## Recommended Priority Order
 
+### Priority 0: Restructure Repository (Before Any New Features)
+Address the structural feedback before building more:
+1. Flatten `packages/betterauth/` — move library to repo root or rename module
+2. Apply consistent file organization pattern to admin + org plugins (route splitting, repository layer)
+3. Ensure all plugins follow the same structural convention
+
 ### Priority 1: Two-Factor Authentication Plugin (2FA/TOTP)
-**Why first**: This is the single most requested security feature after basic auth. Any production deployment will need 2FA. It's also a natural extension of the existing auth flow and plugin system.
+**Why first**: The most critical security feature missing. Any production auth system needs 2FA.
 
-**Scope**:
-- TOTP (Time-based One-Time Password) — compatible with Google Authenticator, Authy, etc.
-- Backup codes for recovery
-- Enable/disable 2FA per user
-- Verification during sign-in flow
-- Endpoints: `/two-factor/enable`, `/two-factor/verify`, `/two-factor/disable`, `/two-factor/generate-backup-codes`
-
-**Complexity**: Medium — Go has excellent TOTP libraries (`pquerna/otp`)
-
----
+**Scope**: TOTP (Google Authenticator compatible), backup codes, enable/disable per user, verification during sign-in.
 
 ### Priority 2: More OAuth Social Providers
-**Why second**: OAuth providers are relatively low-effort to add (they follow the existing `SocialProvider` interface) and dramatically increase the library's appeal. Each provider is ~100-150 lines.
+**Why second**: Low effort (~100-150 lines each), high impact on adoption.
 
-**Recommended order** (by popularity in Go backend projects):
-1. **Discord** — Huge developer community, common in SaaS/gaming
-2. **Microsoft/Azure AD** — Enterprise essential
-3. **GitLab** — DevOps ecosystem (complements GitHub)
-4. **Slack** — Workplace/enterprise apps
-5. **Twitter/X** — Social apps
-6. **LinkedIn** — Professional/B2B apps
-7. **Facebook** — Consumer apps
-
-**Complexity**: Low per provider — the OAuth2 infrastructure is already built
-
----
+**Order**: Discord → Microsoft → GitLab → Slack → Twitter → LinkedIn → Facebook
 
 ### Priority 3: Official Database Adapters (sqlx-based)
-**Why third**: The current PostgreSQL adapter is an example, not an official package. Production users need properly tested, official adapters with migration support.
+**Why third**: Production readiness. The current Postgres adapter is an example, not official.
 
-**Scope**:
-- `adapter/sqlx/` — Unified sqlx adapter supporting:
-  - PostgreSQL (pgx driver)
-  - MySQL
-  - SQLite
-- Auto-migration from schema definitions (including plugin schemas)
-- Proper connection pooling configuration
-- Integration tests using testcontainers-go
-
-**Complexity**: Medium-High — SQL dialect differences, migration logic
-
----
+**Scope**: Unified sqlx adapter for PostgreSQL, MySQL, SQLite with auto-migration.
 
 ### Priority 4: Framework Integration Adapters
-**Why fourth**: While the library works with any `net/http`-compatible framework, explicit adapters provide idiomatic usage patterns and middleware integration.
-
-**Recommended order** (by Go framework popularity):
-1. **Chi** — Most popular Go router, lightweight, idiomatic
-2. **Gin** — Most starred Go web framework
-3. **Echo** — Popular alternative to Gin
-4. **Fiber** — High-performance (note: uses fasthttp, not net/http — may need special handling)
-
-**What adapters provide**:
-- Middleware that extracts auth context into framework-specific context
-- Helper functions for route protection
-- Framework-idiomatic session access
-- Example applications
-
-**Complexity**: Low-Medium per framework
-
----
+**Order**: Chi → Gin → Echo → Fiber
 
 ### Priority 5: Additional High-Value Plugins
-**Why fifth**: After core functionality and infrastructure are solid, these plugins add significant value.
-
-**Recommended order**:
-1. **Magic Link** — Passwordless auth is increasingly popular, relatively simple
-2. **API Key** — Essential for API-first services, common Go use case
-3. **JWT** — Many Go services need JWT tokens for service-to-service auth
-4. **Username plugin** — Simple extension, adds username-based auth
-5. **Email OTP** — Alternative to magic links
-6. **Passkey/WebAuthn** — Modern passwordless, growing adoption (higher complexity)
-7. **Anonymous sessions** — Useful for e-commerce, onboarding flows
-
-**Complexity**: Varies (Magic Link: Low, WebAuthn: High)
-
----
+**Order**: Magic Link → API Key → JWT → Username → Email OTP → Passkey/WebAuthn
 
 ### Priority 6: Core Concept Completeness
-**Scope**:
-- **Secondary Storage** implementation (Redis adapter for session caching)
-- **Dynamic Base URL** support (multi-tenant deployments)
-- Expanded documentation for all concepts
-- Comprehensive test coverage improvements
+Secondary storage (Redis), dynamic base URL, expanded docs, test coverage.
 
 ---
 
@@ -203,7 +430,9 @@ The TypeScript version integrates with Next.js, Nuxt, SvelteKit, Hono, Express, 
 
 | Order | Item | Category | Effort | Impact |
 |-------|------|----------|--------|--------|
-| 0 | Merge Organization plugin PR | Plugin | Done | High |
+| 0a | Restructure repo (flatten packages/betterauth) | Infra | Medium | High |
+| 0b | Refactor org plugin (split routes, add repository layer) | Infra | Medium | High |
+| 0c | Merge Organization plugin PR | Plugin | Done | High |
 | 1 | Two-Factor Auth (TOTP) plugin | Plugin | Medium | Very High |
 | 2 | Discord + Microsoft OAuth | Auth Provider | Low | High |
 | 3 | GitLab + Slack + Twitter OAuth | Auth Provider | Low | Medium |
@@ -217,10 +446,3 @@ The TypeScript version integrates with Next.js, Nuxt, SvelteKit, Hono, Express, 
 | 11 | Username plugin | Plugin | Low | Medium |
 | 12 | Passkey/WebAuthn plugin | Plugin | High | Medium |
 | 13 | Secondary Storage (Redis) | Core | Medium | Medium |
-
-This sequence prioritizes:
-1. **Security** (2FA before anything else)
-2. **Breadth of auth options** (OAuth providers are cheap to add)
-3. **Production readiness** (official DB adapters)
-4. **Developer experience** (framework integrations)
-5. **Feature completeness** (additional plugins)
