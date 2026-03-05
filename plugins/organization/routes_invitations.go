@@ -52,23 +52,23 @@ func (p *Plugin) handleInviteMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-		email := strings.ToLower(strings.TrimSpace(req.Email))
-		if email == "" {
-			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "email is required")
-			return
-		}
-		roleStr := parseRoles(req.Role)
-		if !p.rolesExist(roleStr) {
-			writeError(w, ErrInvalidRoleType.Status, ErrInvalidRoleType.Code, ErrInvalidRoleType.Message)
-			return
-		}
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	if email == "" {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "email is required")
+		return
+	}
+	roleStr := parseRoles(req.Role)
+	if !p.rolesExist(roleStr) {
+		writeError(w, ErrInvalidRoleType.Status, ErrInvalidRoleType.Code, ErrInvalidRoleType.Message)
+		return
+	}
 
-		// Single-owner invariant: owner role is only assigned via explicit transfer.
-		invitedRoles := splitRoles(roleStr)
-		if containsRole(invitedRoles, "owner") {
-			writeError(w, ErrNotAllowedToInviteRole.Status, ErrNotAllowedToInviteRole.Code, ErrNotAllowedToInviteRole.Message)
-			return
-		}
+	// Single-owner invariant: owner role is only assigned via explicit transfer.
+	invitedRoles := splitRoles(roleStr)
+	if containsRole(invitedRoles, "owner") {
+		writeError(w, ErrNotAllowedToInviteRole.Status, ErrNotAllowedToInviteRole.Code, ErrNotAllowedToInviteRole.Message)
+		return
+	}
 
 	// Check if user is already a member (case-insensitive email match).
 	existingUser, _ := p.auth.InternalAdapter().FindUserByEmail(ctx, email)

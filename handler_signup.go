@@ -88,7 +88,7 @@ func (a *Auth) handleSignUpEmail(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
 			return
 		}
-			ip := internal.GetClientIP(r, a.ipHeader())
+		ip := internal.GetClientIP(r, a.ipHeader())
 		ua := r.UserAgent()
 		sess, err := a.sessionManager.Create(ctx, user.ID, ip, ua)
 		if err != nil {
