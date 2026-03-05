@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	betterauth "github.com/jeromesth/go-better-auth/packages/betterauth"
-	"github.com/jeromesth/go-better-auth/packages/betterauth/adapter/memory"
-	"github.com/jeromesth/go-better-auth/packages/betterauth/plugin"
-	"github.com/jeromesth/go-better-auth/packages/betterauth/plugins/totp"
+	betterauth "github.com/jeromesth/go-better-auth"
+	"github.com/jeromesth/go-better-auth/adapter/memory"
+	"github.com/jeromesth/go-better-auth/plugin"
+	"github.com/jeromesth/go-better-auth/plugins/totp"
 )
 
 // --- TOTP math tests ---

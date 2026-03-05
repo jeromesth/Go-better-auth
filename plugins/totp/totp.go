@@ -14,11 +14,11 @@ import (
 	"strings"
 	"time"
 
-	betterauth "github.com/jeromesth/go-better-auth/packages/betterauth"
-	"github.com/jeromesth/go-better-auth/packages/betterauth/adapter"
-	"github.com/jeromesth/go-better-auth/packages/betterauth/internal"
-	"github.com/jeromesth/go-better-auth/packages/betterauth/plugin"
-	"github.com/jeromesth/go-better-auth/packages/betterauth/session"
+	betterauth "github.com/jeromesth/go-better-auth"
+	"github.com/jeromesth/go-better-auth/adapter"
+	"github.com/jeromesth/go-better-auth/internal"
+	"github.com/jeromesth/go-better-auth/plugin"
+	"github.com/jeromesth/go-better-auth/session"
 )
 
 // Options configures the TOTP plugin.
