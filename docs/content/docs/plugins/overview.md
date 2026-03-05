@@ -30,7 +30,7 @@ package twofactor
 
 import (
     "net/http"
-    "github.com/jeromesth/go-better-auth/packages/betterauth/plugin"
+    "github.com/jeromesth/go-better-auth/plugin"
 )
 
 type TwoFactor struct{}

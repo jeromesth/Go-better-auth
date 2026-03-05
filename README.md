@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="https://pkg.go.dev/github.com/jeromesth/go-better-auth/packages/betterauth"><img src="https://pkg.go.dev/badge/github.com/jeromesth/go-better-auth/packages/betterauth.svg" alt="Go Reference"></a>
+  <a href="https://pkg.go.dev/github.com/jeromesth/go-better-auth"><img src="https://pkg.go.dev/badge/github.com/jeromesth/go-better-auth.svg" alt="Go Reference"></a>
   <a href="https://github.com/jeromesth/Go-better-auth/blob/main/LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License"></a>
   <a href="https://github.com/jeromesth/Go-better-auth/stargazers"><img src="https://img.shields.io/github/stars/jeromesth/Go-better-auth?style=flat-square" alt="GitHub Stars"></a>
 </p>
@@ -45,7 +45,7 @@ Go Better Auth is a Go port of the [better-auth](https://github.com/better-auth/
 ## Quick Start
 
 ```bash
-go get github.com/jeromesth/go-better-auth/packages/betterauth
+go get github.com/jeromesth/go-better-auth
 ```
 
 ```go
@@ -55,8 +55,8 @@ import (
     "net/http"
     "os"
 
-    betterauth "github.com/jeromesth/go-better-auth/packages/betterauth"
-    "github.com/jeromesth/go-better-auth/packages/betterauth/adapter/memory"
+    betterauth "github.com/jeromesth/go-better-auth"
+    "github.com/jeromesth/go-better-auth/adapter/memory"
 )
 
 func main() {

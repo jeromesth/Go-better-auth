@@ -27,8 +27,8 @@
 
 **Current problem**: Import paths are verbose and stutter:
 ```go
-import betterauth "github.com/jeromesth/go-better-auth/packages/betterauth"
-import "github.com/jeromesth/go-better-auth/packages/betterauth/plugins/admin"
+import betterauth "github.com/jeromesth/go-better-auth"
+import "github.com/jeromesth/go-better-auth/plugins/admin"
 ```
 
 The `packages/betterauth/` nesting serves no purpose and creates confusion with the existing TypeScript `better-auth` library name.

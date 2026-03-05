@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeromesth/go-better-auth/packages/betterauth/adapter"
-	"github.com/jeromesth/go-better-auth/packages/betterauth/adapter/memory"
+	"github.com/jeromesth/go-better-auth/adapter"
+	"github.com/jeromesth/go-better-auth/adapter/memory"
 )
 
 // adapterTestSuite runs the full adapter test suite against any Adapter implementation.

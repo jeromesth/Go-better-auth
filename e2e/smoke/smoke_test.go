@@ -9,8 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	betterauth "github.com/jeromesth/go-better-auth/packages/betterauth"
-	"github.com/jeromesth/go-better-auth/packages/betterauth/adapter/memory"
+	betterauth "github.com/jeromesth/go-better-auth"
+	"github.com/jeromesth/go-better-auth/adapter/memory"
 )
 
 func newAuth() *betterauth.Auth {

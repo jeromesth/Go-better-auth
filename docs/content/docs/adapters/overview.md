@@ -25,7 +25,7 @@ type Adapter interface {
 The in-memory adapter is included for development and testing:
 
 ```go
-import "github.com/jeromesth/go-better-auth/packages/betterauth/adapter/memory"
+import "github.com/jeromesth/go-better-auth/adapter/memory"
 
 adapter := memory.New()
 ```

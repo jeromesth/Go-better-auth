@@ -28,8 +28,8 @@ package main
 import (
     "net/http"
 
-    betterauth "github.com/jeromesth/go-better-auth/packages/betterauth"
-    "github.com/jeromesth/go-better-auth/packages/betterauth/adapter/memory"
+    betterauth "github.com/jeromesth/go-better-auth"
+    "github.com/jeromesth/go-better-auth/adapter/memory"
 )
 
 func main() {

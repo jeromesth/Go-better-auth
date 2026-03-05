@@ -1,4 +1,4 @@
-module github.com/jeromesth/go-better-auth/e2e
+module github.com/jeromesth/go-better-auth/testutil
 
 go 1.24.7
 
@@ -6,4 +6,4 @@ require github.com/jeromesth/go-better-auth v0.0.0
 
 require golang.org/x/crypto v0.48.0 // indirect
 
-replace github.com/jeromesth/go-better-auth => ..
+replace github.com/jeromesth/go-better-auth => ../

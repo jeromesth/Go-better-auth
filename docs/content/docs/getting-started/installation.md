@@ -9,7 +9,7 @@
 Add Go Better Auth to your project:
 
 ```bash
-go get github.com/jeromesth/go-better-auth/packages/betterauth
+go get github.com/jeromesth/go-better-auth
 ```
 
 ## Basic Setup
@@ -21,8 +21,8 @@ import (
     "net/http"
     "os"
 
-    betterauth "github.com/jeromesth/go-better-auth/packages/betterauth"
-    "github.com/jeromesth/go-better-auth/packages/betterauth/adapter/memory"
+    betterauth "github.com/jeromesth/go-better-auth"
+    "github.com/jeromesth/go-better-auth/adapter/memory"
 )
 
 func main() {
