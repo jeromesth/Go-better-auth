@@ -437,6 +437,57 @@ func containsRole(roles []string, target string) bool {
 	return false
 }
 
+// rolesExist reports whether all roles in the comma-separated value exist in plugin options.
+func (p *Plugin) rolesExist(roleStr string) bool {
+	roles := splitRoles(roleStr)
+	if len(roles) == 0 {
+		return false
+	}
+	for _, role := range roles {
+		if _, ok := p.opts.Roles[role]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// getUserEmail returns a user's email by ID.
+func (p *Plugin) getUserEmail(ctx context.Context, userID string) (string, error) {
+	userRec, err := p.auth.InternalAdapter().FindUserByIDRaw(ctx, userID)
+	if err != nil || userRec == nil {
+		return "", err
+	}
+	email, _ := userRec["email"].(string)
+	return strings.ToLower(strings.TrimSpace(email)), nil
+}
+
+func removeRole(roleStr, target string) string {
+	roles := splitRoles(roleStr)
+	out := make([]string, 0, len(roles))
+	for _, role := range roles {
+		if role == target {
+			continue
+		}
+		out = append(out, role)
+	}
+	return strings.Join(out, ",")
+}
+
+func (p *Plugin) defaultRoleAfterOwnerTransfer() string {
+	if _, ok := p.opts.Roles["admin"]; ok {
+		return "admin"
+	}
+	if _, ok := p.opts.Roles["member"]; ok {
+		return "member"
+	}
+	for role := range p.opts.Roles {
+		if role != "owner" {
+			return role
+		}
+	}
+	return "member"
+}
+
 // generateID generates a unique ID.
 func generateID() string {
 	return internal.NewID()

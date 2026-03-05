@@ -465,10 +465,17 @@ func TestInviteMember(t *testing.T) {
 		}
 	})
 
-	t.Run("invites user with owner role", func(t *testing.T) {
-		inv := inviteMember(t, h, ownerCookies, "co-owner@test.com", "owner")
-		if inv["role"] != "owner" {
-			t.Errorf("expected role 'owner', got %v", inv["role"])
+	t.Run("prevents inviting user with owner role", func(t *testing.T) {
+		rr := postJSON(t, h, "/api/auth/organization/invite-member", map[string]any{
+			"email": "co-owner@test.com",
+			"role":  "owner",
+		}, ownerCookies)
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+		}
+		resp := decodeResp(t, rr)
+		if resp["code"] != "YOU_ARE_NOT_ALLOWED_TO_INVITE_USER_WITH_THIS_ROLE" {
+			t.Errorf("expected YOU_ARE_NOT_ALLOWED_TO_INVITE_USER_WITH_THIS_ROLE, got %v", resp["code"])
 		}
 	})
 
@@ -530,6 +537,19 @@ func TestAcceptInvitation(t *testing.T) {
 		}
 	})
 
+	t.Run("prevents accepting invitation for a different email", func(t *testing.T) {
+		inv := inviteMember(t, h, ownerCookies, "realinvitee@test.com", "member")
+		invID, _ := inv["id"].(string)
+
+		attackerCookies := signUpUser(t, h, "attacker@test.com", "password123", "Attacker")
+		rr := postJSON(t, h, "/api/auth/organization/accept-invitation", map[string]any{
+			"invitationId": invID,
+		}, attackerCookies)
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d: %s", rr.Code, rr.Body.String())
+		}
+	})
+
 	t.Run("prevents re-inviting accepted member", func(t *testing.T) {
 		rr := postJSON(t, h, "/api/auth/organization/invite-member", map[string]any{
 			"email": "invitee@test.com",
@@ -567,6 +587,18 @@ func TestRejectInvitation(t *testing.T) {
 		resp := decodeResp(t, rr)
 		if resp["status"] != "rejected" {
 			t.Errorf("expected status 'rejected', got %v", resp["status"])
+		}
+	})
+
+	t.Run("prevents rejecting invitation for a different email", func(t *testing.T) {
+		inv2 := inviteMember(t, h, ownerCookies, "realrejectee@test.com", "member")
+		inv2ID, _ := inv2["id"].(string)
+		otherCookies := signUpUser(t, h, "other@test.com", "password123", "Other")
+		rr := postJSON(t, h, "/api/auth/organization/reject-invitation", map[string]any{
+			"invitationId": inv2ID,
+		}, otherCookies)
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d: %s", rr.Code, rr.Body.String())
 		}
 	})
 }
@@ -659,6 +691,49 @@ func TestUpdateMemberRole(t *testing.T) {
 		resp := decodeResp(t, rr)
 		if resp["role"] != "member,admin" {
 			t.Errorf("expected role 'member,admin', got %v", resp["role"])
+		}
+	})
+
+	t.Run("owner can transfer ownership and remain non-owner", func(t *testing.T) {
+		rr := postJSON(t, h, "/api/auth/organization/update-member-role", map[string]any{
+			"memberId": memberID,
+			"role":     "owner",
+		}, ownerCookies)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+		}
+
+		rr = getJSON(t, h, "/api/auth/organization/get-full-organization", ownerCookies)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+		}
+		resp := decodeResp(t, rr)
+		members, _ := resp["members"].([]any)
+		ownerCount := 0
+		oldOwnerStillOwner := false
+		newOwnerSet := false
+		for _, m := range members {
+			mm, _ := m.(map[string]any)
+			role, _ := mm["role"].(string)
+			if role == "owner" {
+				ownerCount++
+			}
+			id, _ := mm["id"].(string)
+			if id == memberID && role == "owner" {
+				newOwnerSet = true
+			}
+			if id != memberID && role == "owner" {
+				oldOwnerStillOwner = true
+			}
+		}
+		if ownerCount != 1 {
+			t.Fatalf("expected exactly 1 owner, got %d", ownerCount)
+		}
+		if !newOwnerSet {
+			t.Fatal("expected target member to become owner")
+		}
+		if oldOwnerStillOwner {
+			t.Fatal("expected previous owner to be demoted")
 		}
 	})
 }
@@ -808,6 +883,68 @@ func TestRemoveMember(t *testing.T) {
 		}, ownerCookies)
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+		}
+	})
+}
+
+func TestMemberIDIsScopedToActiveOrganization(t *testing.T) {
+	p := organization.New(nil)
+	auth := newTestAuth(p)
+	h := auth.Handler()
+
+	ownerCookies := signUpUser(t, h, "owner@test.com", "password123", "Owner")
+	org1 := createOrg(t, h, ownerCookies, "Scoped Org 1", "scoped-org-1")
+	org1ID, _ := org1["id"].(string)
+
+	inv1 := inviteMember(t, h, ownerCookies, "scoped1@test.com", "member")
+	inv1ID, _ := inv1["id"].(string)
+	m1Cookies := signUpUser(t, h, "scoped1@test.com", "password123", "Scoped1")
+	member1 := acceptInvitation(t, h, m1Cookies, inv1ID)
+	member1Data, _ := member1["member"].(map[string]any)
+	member1ID, _ := member1Data["id"].(string)
+	if member1ID == "" {
+		t.Fatal("expected member1 id")
+	}
+
+	org2 := createOrg(t, h, ownerCookies, "Scoped Org 2", "scoped-org-2")
+	org2ID, _ := org2["id"].(string)
+	if org2ID == "" {
+		t.Fatal("expected org2 id")
+	}
+	inv2 := inviteMember(t, h, ownerCookies, "scoped2@test.com", "member")
+	inv2ID, _ := inv2["id"].(string)
+	m2Cookies := signUpUser(t, h, "scoped2@test.com", "password123", "Scoped2")
+	member2 := acceptInvitation(t, h, m2Cookies, inv2ID)
+	member2Data, _ := member2["member"].(map[string]any)
+	member2ID, _ := member2Data["id"].(string)
+	if member2ID == "" {
+		t.Fatal("expected member2 id")
+	}
+
+	// Ensure active org is org1.
+	setActive := postJSON(t, h, "/api/auth/organization/set-active", map[string]any{
+		"organizationId": org1ID,
+	}, ownerCookies)
+	if setActive.Code != http.StatusOK {
+		t.Fatalf("failed to set active org: %d %s", setActive.Code, setActive.Body.String())
+	}
+
+	t.Run("cannot update member from another organization by memberId", func(t *testing.T) {
+		rr := postJSON(t, h, "/api/auth/organization/update-member-role", map[string]any{
+			"memberId": member2ID,
+			"role":     "admin",
+		}, ownerCookies)
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d: %s", rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("cannot remove member from another organization by memberId", func(t *testing.T) {
+		rr := postJSON(t, h, "/api/auth/organization/remove-member", map[string]any{
+			"memberId": member2ID,
+		}, ownerCookies)
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d: %s", rr.Code, rr.Body.String())
 		}
 	})
 }
@@ -1105,6 +1242,18 @@ func TestListUserInvitations(t *testing.T) {
 		}
 	})
 
+	t.Run("ignores explicit email query and only returns current user's invitations", func(t *testing.T) {
+		otherCookies := signUpUser(t, h, "otherlist@test.com", "password123", "OtherList")
+		rr := getJSON(t, h, "/api/auth/organization/list-user-invitations?email=target@test.com", otherCookies)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+		}
+		invitations := decodeArray(t, rr)
+		if len(invitations) != 0 {
+			t.Errorf("expected 0 invitations for unrelated user, got %d", len(invitations))
+		}
+	})
+
 	t.Run("excludes accepted invitations from list", func(t *testing.T) {
 		// The user above now has a pending invitation. Accept it.
 		targetCookies := signInUser(t, h, "target@test.com", "password123")
@@ -1333,6 +1482,14 @@ func TestGetInvitation(t *testing.T) {
 		rr := getJSON(t, h, "/api/auth/organization/get-invitation?invitationId=nonexistent", ownerCookies)
 		if rr.Code != http.StatusNotFound {
 			t.Fatalf("expected 404, got %d", rr.Code)
+		}
+	})
+
+	t.Run("non-member and non-invitee cannot access invitation", func(t *testing.T) {
+		otherCookies := signUpUser(t, h, "outsider@test.com", "password123", "Outsider")
+		rr := getJSON(t, h, "/api/auth/organization/get-invitation?invitationId="+invID, otherCookies)
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d: %s", rr.Code, rr.Body.String())
 		}
 	})
 }

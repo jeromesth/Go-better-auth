@@ -2,9 +2,11 @@ package betterauth
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jeromesth/go-better-auth/packages/betterauth/crypto"
+	"github.com/jeromesth/go-better-auth/packages/betterauth/internal"
 	"github.com/jeromesth/go-better-auth/packages/betterauth/session"
 )
 
@@ -14,6 +16,17 @@ func (a *Auth) handleSendVerificationEmail(w http.ResponseWriter, r *http.Reques
 		CallbackURL string `json:"callbackURL"`
 	}
 	if !decodeJSON(w, r, &req) {
+		return
+	}
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+
+	callbackURL := req.CallbackURL
+	if callbackURL == "" {
+		callbackURL = a.opts.BaseURL
+	}
+	if callbackURL != "" && (a.opts.BaseURL != "" || len(a.opts.TrustedOrigins) > 0) &&
+		!internal.ValidateCallbackURL(callbackURL, a.opts.TrustedOrigins, a.opts.BaseURL) {
+		ErrInvalidCallbackURL.WriteJSON(w)
 		return
 	}
 
@@ -47,7 +60,7 @@ func (a *Auth) handleSendVerificationEmail(w http.ResponseWriter, r *http.Reques
 
 	evCfg := a.opts.EmailVerification
 	if evCfg != nil && evCfg.SendVerificationEmail != nil {
-		url := req.CallbackURL + "?token=" + token
+		url := callbackURL + "?token=" + token
 		_ = evCfg.SendVerificationEmail(EmailVerificationData{
 			User:  *user,
 			URL:   url,
@@ -100,7 +113,13 @@ func (a *Auth) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 
 	evCfg := a.opts.EmailVerification
 	if evCfg != nil && evCfg.AutoSignInAfterVerification {
-		sess, err := a.sessionManager.Create(ctx, user.ID, "", "")
+		if err := a.RunSessionCreateHooks(w, r, user.ID); err != nil {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+			return
+		}
+		ip := internal.GetClientIP(r, a.ipHeader())
+		ua := r.UserAgent()
+		sess, err := a.sessionManager.Create(ctx, user.ID, ip, ua)
 		if err == nil {
 			session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, a.isSecure())
 		}

@@ -219,6 +219,13 @@ func (a *Auth) isSecure() bool {
 	return strings.HasPrefix(a.opts.BaseURL, "https://")
 }
 
+func (a *Auth) ipHeader() string {
+	if a.opts.Advanced != nil {
+		return a.opts.Advanced.IPHeader
+	}
+	return ""
+}
+
 // Handler returns the http.Handler that serves all auth endpoints.
 // Mount this at your chosen base path:
 //

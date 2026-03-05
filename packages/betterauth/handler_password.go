@@ -2,9 +2,11 @@ package betterauth
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jeromesth/go-better-auth/packages/betterauth/crypto"
+	"github.com/jeromesth/go-better-auth/packages/betterauth/internal"
 	"github.com/jeromesth/go-better-auth/packages/betterauth/session"
 )
 
@@ -108,6 +110,17 @@ func (a *Auth) handleRequestPasswordReset(w http.ResponseWriter, r *http.Request
 	if !decodeJSON(w, r, &req) {
 		return
 	}
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+
+	redirectURI := req.RedirectURI
+	if redirectURI == "" {
+		redirectURI = a.opts.BaseURL
+	}
+	if redirectURI != "" && (a.opts.BaseURL != "" || len(a.opts.TrustedOrigins) > 0) &&
+		!internal.ValidateCallbackURL(redirectURI, a.opts.TrustedOrigins, a.opts.BaseURL) {
+		ErrInvalidCallbackURL.WriteJSON(w)
+		return
+	}
 
 	ctx := r.Context()
 	ia := a.internalAdapter
@@ -136,7 +149,7 @@ func (a *Auth) handleRequestPasswordReset(w http.ResponseWriter, r *http.Request
 
 	epCfg := a.opts.EmailAndPassword
 	if epCfg != nil && epCfg.SendResetPassword != nil {
-		url := req.RedirectURI + "?token=" + token
+		url := redirectURI + "?token=" + token
 		_ = epCfg.SendResetPassword(ResetPasswordData{
 			User:  *user,
 			URL:   url,

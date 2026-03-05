@@ -85,7 +85,7 @@ func (a *Auth) handleSignInEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ip := internal.GetClientIP(r, "")
+	ip := internal.GetClientIP(r, a.ipHeader())
 	ua := r.UserAgent()
 	sess, err := a.sessionManager.Create(ctx, user.ID, ip, ua)
 	if err != nil {

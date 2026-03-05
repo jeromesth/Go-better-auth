@@ -529,15 +529,23 @@ func (p *Plugin) handleInviteMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email := strings.ToLower(strings.TrimSpace(req.Email))
-	roleStr := parseRoles(req.Role)
+		email := strings.ToLower(strings.TrimSpace(req.Email))
+		if email == "" {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "email is required")
+			return
+		}
+		roleStr := parseRoles(req.Role)
+		if !p.rolesExist(roleStr) {
+			writeError(w, ErrInvalidRoleType.Status, ErrInvalidRoleType.Code, ErrInvalidRoleType.Message)
+			return
+		}
 
-	// Non-owners cannot invite with owner role.
-	invitedRoles := splitRoles(roleStr)
-	if containsRole(invitedRoles, "owner") && !containsRole(splitRoles(memberRole), "owner") {
-		writeError(w, ErrNotAllowedToInviteRole.Status, ErrNotAllowedToInviteRole.Code, ErrNotAllowedToInviteRole.Message)
-		return
-	}
+		// Single-owner invariant: owner role is only assigned via explicit transfer.
+		invitedRoles := splitRoles(roleStr)
+		if containsRole(invitedRoles, "owner") {
+			writeError(w, ErrNotAllowedToInviteRole.Status, ErrNotAllowedToInviteRole.Code, ErrNotAllowedToInviteRole.Message)
+			return
+		}
 
 	// Check if user is already a member (case-insensitive email match).
 	existingUser, _ := p.auth.InternalAdapter().FindUserByEmail(ctx, email)
@@ -674,6 +682,18 @@ func (p *Plugin) handleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Invitations are email-bound: only the invited email can accept.
+	userEmail, err := p.getUserEmail(ctx, userID)
+	if err != nil || userEmail == "" {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load user")
+		return
+	}
+	invitationEmail, _ := invRec["email"].(string)
+	if !strings.EqualFold(invitationEmail, userEmail) {
+		writeError(w, ErrInvitationNotFound.Status, ErrInvitationNotFound.Code, ErrInvitationNotFound.Message)
+		return
+	}
+
 	// Check expiration.
 	expiresAt, _ := invRec["expires_at"].(time.Time)
 	if !expiresAt.IsZero() && time.Now().UTC().After(expiresAt) {
@@ -740,7 +760,7 @@ func (p *Plugin) handleRejectInvitation(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	_, _, ok := p.getAuthenticatedUser(w, r)
+	userID, _, ok := p.getAuthenticatedUser(w, r)
 	if !ok {
 		return
 	}
@@ -752,6 +772,18 @@ func (p *Plugin) handleRejectInvitation(w http.ResponseWriter, r *http.Request) 
 		Where: []adapter.Where{adapter.EQ("id", req.InvitationID)},
 	})
 	if err != nil || invRec == nil {
+		writeError(w, ErrInvitationNotFound.Status, ErrInvitationNotFound.Code, ErrInvitationNotFound.Message)
+		return
+	}
+
+	// Invitations are email-bound: only the invited email can reject.
+	userEmail, err := p.getUserEmail(ctx, userID)
+	if err != nil || userEmail == "" {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load user")
+		return
+	}
+	invitationEmail, _ := invRec["email"].(string)
+	if !strings.EqualFold(invitationEmail, userEmail) {
 		writeError(w, ErrInvitationNotFound.Status, ErrInvitationNotFound.Code, ErrInvitationNotFound.Message)
 		return
 	}
@@ -823,7 +855,7 @@ func (p *Plugin) handleCancelInvitation(w http.ResponseWriter, r *http.Request) 
 // --- GET /organization/get-invitation ---
 
 func (p *Plugin) handleGetInvitation(w http.ResponseWriter, r *http.Request) {
-	_, _, ok := p.getAuthenticatedUser(w, r)
+	userID, _, ok := p.getAuthenticatedUser(w, r)
 	if !ok {
 		return
 	}
@@ -846,6 +878,19 @@ func (p *Plugin) handleGetInvitation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	inv := recordToInvitation(invRec)
+	userEmail, err := p.getUserEmail(ctx, userID)
+	if err != nil || userEmail == "" {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load user")
+		return
+	}
+	// The invitation is visible to the invitee or organization members only.
+	if !strings.EqualFold(inv.Email, userEmail) {
+		memberRec, err := p.findMemberByUserAndOrg(ctx, userID, inv.OrganizationID)
+		if err != nil || memberRec == nil {
+			writeError(w, ErrInvitationNotFound.Status, ErrInvitationNotFound.Code, ErrInvitationNotFound.Message)
+			return
+		}
+	}
 
 	// Enrich with organization name/slug.
 	orgID := inv.OrganizationID
@@ -913,17 +958,12 @@ func (p *Plugin) handleListUserInvitations(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 	adp := p.auth.InternalAdapter().Adapter()
 
-	// Get user email.
-	email := r.URL.Query().Get("email")
-	if email == "" {
-		userRec, err := p.auth.InternalAdapter().FindUserByIDRaw(ctx, userID)
-		if err != nil || userRec == nil {
-			writeJSON(w, http.StatusOK, []*Invitation{})
-			return
-		}
-		email, _ = userRec["email"].(string)
+	// Email is always derived from authenticated user to prevent invitation enumeration.
+	email, err := p.getUserEmail(ctx, userID)
+	if err != nil || email == "" {
+		writeJSON(w, http.StatusOK, []*Invitation{})
+		return
 	}
-	email = strings.ToLower(strings.TrimSpace(email))
 
 	// Find pending invitations by matching email case-insensitively.
 	allInvitations, _ := adp.FindMany(ctx, "invitation", adapter.Query{
@@ -1001,7 +1041,10 @@ func (p *Plugin) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
 
 	if req.MemberID != "" {
 		targetMember, _ = adp.FindOne(ctx, "member", adapter.Query{
-			Where: []adapter.Where{adapter.EQ("id", req.MemberID)},
+			Where: []adapter.Where{
+				adapter.EQ("id", req.MemberID),
+				adapter.EQ("organization_id", orgID),
+			},
 		})
 	} else if req.Email != "" {
 		email := strings.ToLower(strings.TrimSpace(req.Email))
@@ -1032,7 +1075,10 @@ func (p *Plugin) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
 
 	memberID, _ := targetMember["id"].(string)
 	_ = adp.Delete(ctx, "member", adapter.Query{
-		Where: []adapter.Where{adapter.EQ("id", memberID)},
+		Where: []adapter.Where{
+			adapter.EQ("id", memberID),
+			adapter.EQ("organization_id", orgID),
+		},
 	})
 
 	writeJSON(w, http.StatusOK, recordToMember(targetMember))
@@ -1082,16 +1128,28 @@ func (p *Plugin) handleUpdateMemberRole(w http.ResponseWriter, r *http.Request) 
 
 	// Find target member.
 	targetMember, err := adp.FindOne(ctx, "member", adapter.Query{
-		Where: []adapter.Where{adapter.EQ("id", req.MemberID)},
+		Where: []adapter.Where{
+			adapter.EQ("id", req.MemberID),
+			adapter.EQ("organization_id", orgID),
+		},
 	})
 	if err != nil || targetMember == nil {
 		writeError(w, ErrMemberNotFound.Status, ErrMemberNotFound.Code, ErrMemberNotFound.Message)
 		return
 	}
 
+	newRole := parseRoles(req.Role)
+	if !p.rolesExist(newRole) {
+		writeError(w, ErrInvalidRoleType.Status, ErrInvalidRoleType.Code, ErrInvalidRoleType.Message)
+		return
+	}
+
 	targetRole, _ := targetMember["role"].(string)
 	callerMemberID, _ := callerMember["id"].(string)
 	targetMemberID, _ := targetMember["id"].(string)
+	callerIsOwner := containsRole(splitRoles(callerRole), "owner")
+	targetIsOwner := containsRole(splitRoles(targetRole), "owner")
+	newHasOwner := containsRole(splitRoles(newRole), "owner")
 
 	// Non-owners cannot update owners (unless updating themselves).
 	if callerMemberID != targetMemberID && !CanManageRole(callerRole, targetRole) {
@@ -1099,14 +1157,49 @@ func (p *Plugin) handleUpdateMemberRole(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	newRole := parseRoles(req.Role)
+	// Single-owner invariant:
+	// - Only the current owner can transfer ownership.
+	// - Owner role cannot be dropped from the current owner without transfer.
+	if newHasOwner && !callerIsOwner {
+		writeError(w, ErrNotAllowedToUpdateRole.Status, ErrNotAllowedToUpdateRole.Code, ErrNotAllowedToUpdateRole.Message)
+		return
+	}
+	if targetIsOwner && !newHasOwner {
+		writeError(w, ErrCannotRemoveLastOwner.Status, ErrCannotRemoveLastOwner.Code, ErrCannotRemoveLastOwner.Message)
+		return
+	}
+	if callerMemberID == targetMemberID && callerIsOwner && !newHasOwner {
+		writeError(w, ErrCannotRemoveLastOwner.Status, ErrCannotRemoveLastOwner.Code, ErrCannotRemoveLastOwner.Message)
+		return
+	}
 
 	rec, err := adp.Update(ctx, "member", adapter.Query{
-		Where: []adapter.Where{adapter.EQ("id", req.MemberID)},
+		Where: []adapter.Where{
+			adapter.EQ("id", req.MemberID),
+			adapter.EQ("organization_id", orgID),
+		},
 	}, map[string]any{"role": newRole})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update member role")
 		return
+	}
+
+	if newHasOwner && callerMemberID != targetMemberID {
+		// Transfer ownership by demoting the previous owner in the same operation.
+		demotedRole := removeRole(callerRole, "owner")
+		if demotedRole == "" {
+			demotedRole = p.defaultRoleAfterOwnerTransfer()
+		}
+		_, err = adp.Update(ctx, "member", adapter.Query{
+			Where: []adapter.Where{
+				adapter.EQ("id", callerMemberID),
+				adapter.EQ("organization_id", orgID),
+			},
+		}, map[string]any{"role": demotedRole})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to transfer ownership")
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusOK, recordToMember(rec))
@@ -1334,6 +1427,14 @@ func (p *Plugin) handleAddMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	roleStr := parseRoles(req.Role)
+	if !p.rolesExist(roleStr) {
+		writeError(w, ErrInvalidRoleType.Status, ErrInvalidRoleType.Code, ErrInvalidRoleType.Message)
+		return
+	}
+	if containsRole(splitRoles(roleStr), "owner") {
+		writeError(w, ErrNotAllowedToInviteRole.Status, ErrNotAllowedToInviteRole.Code, ErrNotAllowedToInviteRole.Message)
+		return
+	}
 	now := time.Now().UTC()
 	memberID := generateID()
 

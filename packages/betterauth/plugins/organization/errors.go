@@ -61,4 +61,6 @@ var (
 		Code: "EMPTY_NAME", Message: "Organization name cannot be empty", Status: http.StatusBadRequest}
 	ErrNotAllowedToCancelInvitation = &OrgError{
 		Code: "YOU_ARE_NOT_ALLOWED_TO_CANCEL_INVITATIONS", Message: "You are not allowed to cancel invitations", Status: http.StatusForbidden}
+	ErrInvalidRoleType = &OrgError{
+		Code: "INVALID_ROLE_TYPE", Message: "Invalid role type", Status: http.StatusBadRequest}
 )

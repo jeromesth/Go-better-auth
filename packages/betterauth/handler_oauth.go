@@ -29,6 +29,11 @@ func (a *Auth) handleOAuthSignIn(w http.ResponseWriter, r *http.Request) {
 	if callbackURL == "" {
 		callbackURL = a.opts.BaseURL
 	}
+	if callbackURL != "" && (a.opts.BaseURL != "" || len(a.opts.TrustedOrigins) > 0) &&
+		!internal.ValidateCallbackURL(callbackURL, a.opts.TrustedOrigins, a.opts.BaseURL) {
+		ErrInvalidCallbackURL.WriteJSON(w)
+		return
+	}
 
 	state, err := a.stateStore.Generate(callbackURL, "")
 	if err != nil {
@@ -127,7 +132,12 @@ func (a *Auth) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	_ = providerCfg
 
-	ip := internal.GetClientIP(r, "")
+	if err := a.RunSessionCreateHooks(w, r, userID); err != nil {
+		writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+		return
+	}
+
+	ip := internal.GetClientIP(r, a.ipHeader())
 	ua := r.UserAgent()
 	sess, err := a.sessionManager.Create(ctx, userID, ip, ua)
 	if err != nil {
@@ -140,6 +150,11 @@ func (a *Auth) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	redirectURL := stateEntry.CallbackURL
 	if redirectURL == "" {
 		redirectURL = a.opts.BaseURL
+	}
+	if redirectURL != "" && (a.opts.BaseURL != "" || len(a.opts.TrustedOrigins) > 0) &&
+		!internal.ValidateCallbackURL(redirectURL, a.opts.TrustedOrigins, a.opts.BaseURL) {
+		ErrInvalidCallbackURL.WriteJSON(w)
+		return
 	}
 	http.Redirect(w, r, redirectURL, http.StatusFound)
 }
@@ -175,6 +190,14 @@ func (a *Auth) handleLinkSocial(w http.ResponseWriter, r *http.Request) {
 	provider := a.SocialProvider(req.Provider)
 	if provider == nil {
 		ErrOAuthProviderNotFound.WriteJSON(w)
+		return
+	}
+	if req.CallbackURL == "" {
+		req.CallbackURL = a.opts.BaseURL
+	}
+	if req.CallbackURL != "" && (a.opts.BaseURL != "" || len(a.opts.TrustedOrigins) > 0) &&
+		!internal.ValidateCallbackURL(req.CallbackURL, a.opts.TrustedOrigins, a.opts.BaseURL) {
+		ErrInvalidCallbackURL.WriteJSON(w)
 		return
 	}
 
