@@ -219,12 +219,18 @@ func (a *Auth) isSecure() bool {
 	return strings.HasPrefix(a.opts.BaseURL, "https://")
 }
 
+// IsSecure is the exported version of isSecure, for use by plugins.
+func (a *Auth) IsSecure() bool { return a.isSecure() }
+
 func (a *Auth) ipHeader() string {
 	if a.opts.Advanced != nil {
 		return a.opts.Advanced.IPHeader
 	}
 	return ""
 }
+
+// IPHeader is the exported version of ipHeader, for use by plugins.
+func (a *Auth) IPHeader() string { return a.ipHeader() }
 
 // Handler returns the http.Handler that serves all auth endpoints.
 // Mount this at your chosen base path:

@@ -322,7 +322,7 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Create the real session.
-	ip := internal.GetClientIP(r, "")
+	ip := internal.GetClientIP(r, p.auth.IPHeader())
 	ua := r.UserAgent()
 	sess, err := p.auth.SessionManager().Create(ctx, userID, ip, ua)
 	if err != nil {
@@ -336,7 +336,7 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, false)
+	session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, p.auth.IsSecure())
 	writeTOTPJSON(w, http.StatusOK, map[string]any{
 		"user":    user,
 		"session": sess,

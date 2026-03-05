@@ -1,11 +1,13 @@
 package betterauth
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/jeromesth/go-better-auth/crypto"
 	"github.com/jeromesth/go-better-auth/internal"
+	"github.com/jeromesth/go-better-auth/plugin"
 	"github.com/jeromesth/go-better-auth/session"
 )
 
@@ -85,7 +87,9 @@ func (a *Auth) handleSignUpEmail(w http.ResponseWriter, r *http.Request) {
 	if epCfg.AutoSignIn {
 		// Run session-create hooks (e.g., ban check from admin plugin).
 		if err := a.RunSessionCreateHooks(w, r, user.ID); err != nil {
-			writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+			if !errors.Is(err, plugin.ErrHandled) {
+				writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+			}
 			return
 		}
 		ip := internal.GetClientIP(r, a.ipHeader())
