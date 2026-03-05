@@ -19,7 +19,7 @@ import (
 	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	betterauth "github.com/jeromesth/go-better-auth/packages/betterauth"
+	betterauth "github.com/jeromesth/go-better-auth"
 	"github.com/jeromesth/go-better-auth/examples/backend/adapter/postgres"
 )
 

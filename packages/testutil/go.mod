@@ -1,9 +1,0 @@
-module github.com/jeromesth/go-better-auth/packages/testutil
-
-go 1.24.7
-
-require github.com/jeromesth/go-better-auth/packages/betterauth v0.0.0
-
-require golang.org/x/crypto v0.48.0 // indirect
-
-replace github.com/jeromesth/go-better-auth/packages/betterauth => ../betterauth

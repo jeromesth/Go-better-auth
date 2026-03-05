@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jeromesth/go-better-auth/packages/betterauth/adapter"
+	"github.com/jeromesth/go-better-auth/adapter"
 )
 
 // Adapter implements adapter.Adapter using a PostgreSQL connection pool.

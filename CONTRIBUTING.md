@@ -6,18 +6,18 @@ Thank you for your interest in contributing to Go Better Auth! This guide will h
 
 ```
 go-better-auth/
-├── packages/betterauth/    # Core authentication library
-│   ├── adapter/            # Database adapter interface + memory adapter
-│   ├── crypto/             # Password hashing, tokens, HMAC
-│   ├── internal/           # Internal utilities
-│   ├── models/             # Data models (User, Session, Account, etc.)
-│   ├── oauth/              # OAuth state management
-│   ├── plugin/             # Plugin system interfaces
-│   ├── ratelimit/          # Rate limiting
-│   ├── session/            # Session management
-│   ├── social/             # Social login providers
-│   └── handler_*.go        # HTTP endpoint handlers
-├── packages/testutil/      # Shared test utilities
+├── adapter/                # Database adapter interface + memory adapter
+├── crypto/                 # Password hashing, tokens, HMAC
+├── internal/               # Internal utilities
+├── models/                 # Data models (User, Session, Account, etc.)
+├── oauth/                  # OAuth state management
+├── plugin/                 # Plugin system interfaces
+├── plugins/                # Built-in plugins (admin, organization)
+├── ratelimit/              # Rate limiting
+├── session/                # Session management
+├── social/                 # Social login providers
+├── handler_*.go            # HTTP endpoint handlers
+├── testutil/               # Shared test utilities
 ├── e2e/                    # End-to-end tests
 │   ├── adapter/            # Adapter conformance tests
 │   ├── integration/        # Full integration tests
@@ -114,7 +114,7 @@ Prefixes: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
 
 To contribute a new database adapter:
 
-1. Create a new package (e.g., `packages/postgres-adapter/`)
+1. Create a new package (e.g., `adapter/postgres/`)
 2. Implement the `adapter.Adapter` interface
 3. Add tests in `e2e/adapter/` using the `adapterTestSuite` helper
 4. Add documentation in `docs/content/docs/adapters/`
@@ -123,7 +123,7 @@ To contribute a new database adapter:
 
 To contribute a new OAuth provider:
 
-1. Implement `social.SocialProvider` in `packages/betterauth/social/`
+1. Implement `social.SocialProvider` in `social/`
 2. Add tests
 3. Register it as a built-in in `auth.go`
 

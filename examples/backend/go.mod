@@ -4,7 +4,7 @@ go 1.24.7
 
 require (
 	github.com/jackc/pgx/v5 v5.7.2
-	github.com/jeromesth/go-better-auth/packages/betterauth v0.0.0-00010101000000-000000000000
+	github.com/jeromesth/go-better-auth v0.0.0-00010101000000-000000000000
 )
 
 require (
@@ -16,4 +16,4 @@ require (
 	golang.org/x/text v0.34.0 // indirect
 )
 
-replace github.com/jeromesth/go-better-auth/packages/betterauth => ../../packages/betterauth
+replace github.com/jeromesth/go-better-auth => ../..
