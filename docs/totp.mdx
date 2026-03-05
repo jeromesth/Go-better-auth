@@ -1,0 +1,81 @@
+# TOTP / Two-Factor Authentication
+
+The TOTP plugin adds time-based one-time password (RFC 6238) support to go-better-auth. When enabled for a user, sign-in issues a short-lived challenge token instead of a session. The client must exchange that token plus a valid OTP code for a real session.
+
+## How It Works
+
+1. User calls `POST /totp/generate` to get a secret and QR-code URL.
+2. User scans the QR code in their authenticator app, then calls `POST /totp/enable` with the first code to activate 2FA.
+3. On future sign-ins, `POST /sign-in/email` returns **403 TOTP_REQUIRED** with a `challengeToken` instead of a session.
+4. Client calls `POST /totp/verify` with the challenge token and a fresh OTP code to receive a normal session.
+
+## Configuration
+
+```go
+import "github.com/jeromesth/go-better-auth/packages/betterauth/plugins/totp"
+
+auth := betterauth.New(betterauth.BetterAuthOptions{
+    // ...
+    Plugins: []plugin.Plugin{
+        totp.New(&totp.Options{
+            Issuer:             "MyApp",  // shown in authenticator apps (default: AppName)
+            ChallengeExpiresIn: 300,      // seconds before challenge token expires (default: 300)
+        }),
+    },
+})
+```
+
+## Endpoints
+
+| Method | Path | Auth required | Description |
+|--------|------|:---:|-------------|
+| `POST` | `/totp/generate` | ✓ | Generate a new TOTP secret |
+| `POST` | `/totp/enable` | ✓ | Verify first code and activate 2FA |
+| `POST` | `/totp/disable` | ✓ | Verify code and deactivate 2FA |
+| `GET`  | `/totp/status` | ✓ | Return whether 2FA is enabled |
+| `POST` | `/totp/verify` | — | Exchange challenge token + OTP for a session |
+
+## Example Usage
+
+### Enable 2FA
+
+```ts
+// 1. Generate secret
+const { secret, otpauthURL } = await fetch("/api/auth/totp/generate", {
+  method: "POST",
+  credentials: "include",
+}).then(r => r.json());
+
+// Display otpauthURL as a QR code to the user.
+
+// 2. User scans, then confirm with first code
+await fetch("/api/auth/totp/enable", {
+  method: "POST",
+  credentials: "include",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ code: "123456" }),
+});
+```
+
+### Sign In with 2FA
+
+```ts
+// 1. Normal sign-in — returns 403 when 2FA is active
+const res = await fetch("/api/auth/sign-in/email", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ email, password }),
+});
+
+if (res.status === 403) {
+  const { challengeToken } = await res.json(); // code: "TOTP_REQUIRED"
+
+  // 2. Prompt user for OTP code, then verify
+  await fetch("/api/auth/totp/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ challengeToken, code: userOTPInput }),
+  });
+  // Session cookie is now set.
+}
+```

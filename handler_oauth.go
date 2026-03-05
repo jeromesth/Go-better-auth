@@ -1,10 +1,12 @@
 package betterauth
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/jeromesth/go-better-auth/internal"
+	"github.com/jeromesth/go-better-auth/plugin"
 	"github.com/jeromesth/go-better-auth/session"
 )
 
@@ -133,7 +135,9 @@ func (a *Auth) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	_ = providerCfg
 
 	if err := a.RunSessionCreateHooks(w, r, userID); err != nil {
-		writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+		if !errors.Is(err, plugin.ErrHandled) {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+		}
 		return
 	}
 

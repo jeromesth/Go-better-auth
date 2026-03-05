@@ -1,12 +1,14 @@
 package betterauth
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/jeromesth/go-better-auth/crypto"
 	"github.com/jeromesth/go-better-auth/internal"
+	"github.com/jeromesth/go-better-auth/plugin"
 	"github.com/jeromesth/go-better-auth/session"
 )
 
@@ -114,7 +116,9 @@ func (a *Auth) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 	evCfg := a.opts.EmailVerification
 	if evCfg != nil && evCfg.AutoSignInAfterVerification {
 		if err := a.RunSessionCreateHooks(w, r, user.ID); err != nil {
-			writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+			if !errors.Is(err, plugin.ErrHandled) {
+				writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+			}
 			return
 		}
 		ip := internal.GetClientIP(r, a.ipHeader())

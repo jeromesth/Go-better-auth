@@ -1,7 +1,14 @@
 // Package plugin defines the Plugin interface and optional capability interfaces.
 package plugin
 
-import "net/http"
+import (
+	"errors"
+	"net/http"
+)
+
+// ErrHandled is returned by hook functions that have already written
+// the HTTP response. Callers must abort further writes after receiving it.
+var ErrHandled = errors.New("response already handled")
 
 // Plugin is the base interface all plugins must implement.
 type Plugin interface {
