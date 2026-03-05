@@ -21,11 +21,12 @@ make lint   # runs gofmt check
 
 ## Rules
 
-### Always run `gofmt` before finishing a task or opening a PR
+### Before opening any PR, always run both:
 
-Run `gofmt -l packages/ e2e/` before committing. If it lists any files, fix them with `gofmt -w packages/ e2e/` and include the formatting fix in the same commit or a separate `style:` commit before pushing.
+1. **Tests** — `cd packages/betterauth && go test ./...` — all must pass
+2. **Formatter** — `gofmt -l packages/ e2e/` — if any files listed, fix with `gofmt -w packages/ e2e/`
 
-This is checked in CI — a PR with formatting issues will fail.
+Both are enforced by CI. A PR with failing tests or formatting issues will fail.
 
 ## Project Layout
 
