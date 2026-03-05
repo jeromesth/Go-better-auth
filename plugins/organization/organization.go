@@ -93,6 +93,7 @@ type FullOrganization struct {
 type Plugin struct {
 	opts *Options
 	auth *betterauth.Auth
+	repo *repository
 }
 
 // New creates a new organization plugin with the given options.
@@ -116,6 +117,7 @@ func (p *Plugin) ID() string { return "organization" }
 
 func (p *Plugin) SetAuth(auth any) {
 	p.auth = auth.(*betterauth.Auth)
+	p.repo = newRepository(p.auth)
 }
 
 // Schema returns the database schema extensions for the organization plugin.
@@ -224,12 +226,7 @@ func (p *Plugin) getAuthenticatedUser(w http.ResponseWriter, r *http.Request) (u
 
 // findMemberByUserAndOrg returns the member record for a user in an org.
 func (p *Plugin) findMemberByUserAndOrg(ctx context.Context, userID, orgID string) (map[string]any, error) {
-	return p.auth.InternalAdapter().Adapter().FindOne(ctx, "member", adapter.Query{
-		Where: []adapter.Where{
-			adapter.EQ("user_id", userID),
-			adapter.EQ("organization_id", orgID),
-		},
-	})
+	return p.repo.findMemberByUserAndOrg(ctx, userID, orgID)
 }
 
 // getActiveOrgID extracts the active organization ID from a raw session.
@@ -254,26 +251,17 @@ func (p *Plugin) setActiveOrgOnSession(ctx context.Context, sessionToken, orgID 
 
 // countUserOrganizations returns the number of organizations a user belongs to.
 func (p *Plugin) countUserOrganizations(ctx context.Context, userID string) (int64, error) {
-	return p.auth.InternalAdapter().Adapter().Count(ctx, "member", adapter.Query{
-		Where: []adapter.Where{adapter.EQ("user_id", userID)},
-	})
+	return p.repo.countMembersByUser(ctx, userID)
 }
 
 // countOrgMembers returns the number of members in an organization.
 func (p *Plugin) countOrgMembers(ctx context.Context, orgID string) (int64, error) {
-	return p.auth.InternalAdapter().Adapter().Count(ctx, "member", adapter.Query{
-		Where: []adapter.Where{adapter.EQ("organization_id", orgID)},
-	})
+	return p.repo.countMembersByOrg(ctx, orgID)
 }
 
 // countPendingInvitations returns the number of pending invitations for an org.
 func (p *Plugin) countPendingInvitations(ctx context.Context, orgID string) (int64, error) {
-	return p.auth.InternalAdapter().Adapter().Count(ctx, "invitation", adapter.Query{
-		Where: []adapter.Where{
-			adapter.EQ("organization_id", orgID),
-			adapter.EQ("status", "pending"),
-		},
-	})
+	return p.repo.countPendingInvitations(ctx, orgID)
 }
 
 // isLastOwner checks if a member is the last owner of an organization.
