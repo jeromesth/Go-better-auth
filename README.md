@@ -35,12 +35,19 @@ Go Better Auth is a Go port of the [better-auth](https://github.com/better-auth/
 ## Features
 
 - Email/password authentication (scrypt hashing, configurable)
-- OAuth 2.0 social login (Google, GitHub, Apple)
+- OAuth 2.0 social login (Google, GitHub, Apple, Microsoft, Slack, GitLab)
 - Session management (cookie + Bearer token)
 - Email verification and password reset
+- Magic Link passwordless authentication
+- Two-factor authentication (TOTP / Google Authenticator)
+- JWT plugin (stateless token verification)
+- API Key plugin (service-to-service auth)
 - Rate limiting
 - Plugin system (endpoints, schemas, hooks, middleware)
-- Database adapter interface (in-memory included, bring your own for production)
+- Database adapters: in-memory (testing) + sqlx (PostgreSQL, MySQL, SQLite)
+- Framework adapters: Chi, Gin (and stdlib net/http natively)
+- Admin plugin (RBAC, user management, impersonation)
+- Organization plugin (multi-tenancy, members, invitations)
 
 ## Quick Start
 
@@ -81,19 +88,60 @@ func main() {
 
 ```
 go-better-auth/
-├── packages/
-│   ├── betterauth/     # Core authentication library
-│   └── testutil/       # Test utilities
+├── auth.go             # Core authentication library (package betterauth)
+├── adapter/            # Database adapter interface + implementations
+│   ├── memory/         # In-memory adapter (testing)
+│   └── sqlx/           # sqlx adapter (PostgreSQL, MySQL, SQLite)
+├── framework/          # Framework router adapters
+│   ├── chi/            # Chi adapter
+│   └── gin/            # Gin adapter
+├── plugins/            # Plugin implementations
+│   ├── admin/          # Admin plugin (RBAC, user management)
+│   ├── apikey/         # API Key plugin
+│   ├── jwt/            # JWT plugin
+│   ├── magiclink/      # Magic Link plugin
+│   ├── organization/   # Organization/multi-tenancy plugin
+│   └── totp/           # TOTP / 2FA plugin
+├── social/             # OAuth provider implementations
+├── plugin/             # Plugin interface definitions
+├── session/            # Session management
+├── crypto/             # Cryptographic utilities
+├── models/             # Shared data models
+├── internal/           # Private utilities
+├── testutil/           # Shared test helpers
 ├── e2e/                # End-to-end tests
-│   ├── adapter/        # Database adapter tests
-│   ├── integration/    # Full integration tests
-│   └── smoke/          # Quick smoke tests
+├── examples/           # Example applications
 ├── docs/               # Documentation
-│   └── content/docs/   # Doc pages (getting started, API reference, etc.)
 ├── go.work             # Go workspace configuration
-├── Makefile            # Build, test, lint commands
-└── PLAN.md             # Architecture & implementation plan
+└── Makefile            # Build, test, lint commands
 ```
+
+## OAuth Providers
+
+| Provider | Status |
+|----------|--------|
+| Google | ✅ |
+| GitHub | ✅ |
+| Apple | ✅ |
+| Microsoft | ✅ |
+| Slack | ✅ |
+| GitLab | ✅ |
+| Discord | planned |
+| Twitter/X | planned |
+
+## Plugins
+
+| Plugin | Status | Package |
+|--------|--------|---------|
+| Admin | ✅ | `plugins/admin` |
+| Organization | ✅ | `plugins/organization` |
+| TOTP (2FA) | ✅ | `plugins/totp` |
+| JWT | ✅ | `plugins/jwt` |
+| API Key | ✅ | `plugins/apikey` |
+| Magic Link | ✅ | `plugins/magiclink` |
+| Passkey/WebAuthn | planned | — |
+| Username | planned | — |
+| Phone Number | planned | — |
 
 ## API Endpoints
 

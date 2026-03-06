@@ -317,41 +317,41 @@ type Authorizer interface {
 | Google | ✅ | ✅ |
 | GitHub | ✅ | ✅ |
 | Apple | ✅ | ✅ |
-| Discord | ✅ | ❌ |
-| Microsoft | ✅ | ❌ |
-| Facebook | ✅ | ❌ |
-| Twitter/X | ✅ | ❌ |
-| LinkedIn | ✅ | ❌ |
-| Slack | ✅ | ❌ |
-| GitLab | ✅ | ❌ |
-| 25+ others | ✅ | ❌ |
+| Discord | ✅ | planned |
+| Microsoft | ✅ | ✅ |
+| Facebook | ✅ | planned |
+| Twitter/X | ✅ | planned |
+| LinkedIn | ✅ | planned |
+| Slack | ✅ | ✅ |
+| GitLab | ✅ | ✅ |
+| 25+ others | ✅ | planned |
 
 ### Plugins
 | Plugin | TypeScript | Go Port |
 |--------|-----------|---------|
 | Admin | ✅ | ✅ |
 | Organization | ✅ | 🔄 (in PR) |
-| Two-Factor (2FA/TOTP) | ✅ | ❌ |
-| Magic Link | ✅ | ❌ |
-| Email OTP | ✅ | ❌ |
-| Passkey (WebAuthn) | ✅ | ❌ |
-| Username | ✅ | ❌ |
-| API Key | ✅ | ❌ |
-| JWT | ✅ | ❌ |
-| Bearer | ✅ | ❌ |
-| Multi-Session | ✅ | ❌ |
-| Anonymous | ✅ | ❌ |
-| Phone Number | ✅ | ❌ |
-| SSO (SAML) | ✅ | ❌ |
-| OIDC Provider | ✅ | ❌ |
-| OAuth 2.1 Provider | ✅ | ❌ |
-| One-Time Token | ✅ | ❌ |
-| Generic OAuth | ✅ | ❌ |
-| Captcha | ✅ | ❌ |
-| Have I Been Pwned | ✅ | ❌ |
-| Open API | ✅ | ❌ |
-| i18n | ✅ | ❌ |
-| Stripe (payments) | ✅ | ❌ |
+| Two-Factor (2FA/TOTP) | ✅ | ✅ |
+| Magic Link | ✅ | ✅ |
+| API Key | ✅ | ✅ |
+| JWT | ✅ | ✅ |
+| Email OTP | ✅ | planned |
+| Passkey (WebAuthn) | ✅ | planned |
+| Username | ✅ | planned |
+| Bearer | ✅ | planned |
+| Multi-Session | ✅ | planned |
+| Anonymous | ✅ | planned |
+| Phone Number | ✅ | planned |
+| SSO (SAML) | ✅ | future |
+| OIDC Provider | ✅ | future |
+| OAuth 2.1 Provider | ✅ | future |
+| One-Time Token | ✅ | future |
+| Generic OAuth | ✅ | future |
+| Captcha | ✅ | future |
+| Have I Been Pwned | ✅ | future |
+| Open API | ✅ | future |
+| i18n | ✅ | future |
+| Stripe (payments) | ✅ | future |
 
 ### Core Concepts
 | Concept | TypeScript | Go Port |
@@ -374,75 +374,155 @@ type Authorizer interface {
 ### Database Adapters
 | Adapter | TypeScript | Go Port |
 |---------|-----------|---------|
-| PostgreSQL | ✅ | ✅ (example) |
-| MySQL | ✅ | ❌ |
-| SQLite | ✅ | ❌ |
-| MongoDB | ✅ | ❌ |
+| PostgreSQL | ✅ | ✅ (sqlx) |
+| MySQL | ✅ | ✅ (sqlx) |
+| SQLite | ✅ | ✅ (sqlx) |
+| MongoDB | ✅ | future |
 | In-Memory | ✅ | ✅ |
 
 ### Framework Integrations (Go-Relevant)
 | Framework | Status |
 |-----------|--------|
 | net/http (stdlib) | ✅ Works natively |
-| Chi | ❌ No adapter |
-| Gin | ❌ No adapter |
-| Echo | ❌ No adapter |
-| Fiber | ❌ No adapter |
-| gorilla/mux | ❌ No adapter |
+| Chi | ✅ framework/chi |
+| Gin | ✅ framework/gin |
+| Echo | planned |
+| Fiber | planned |
+| gorilla/mux | planned |
 
 ---
 
-## Recommended Priority Order
+---
 
-### Priority 0: Restructure Repository (Before Any New Features)
-Address the structural feedback before building more:
-1. Flatten `packages/betterauth/` — move library to repo root or rename module
-2. Apply consistent file organization pattern to admin + org plugins (route splitting, repository layer)
-3. Ensure all plugins follow the same structural convention
+## Sprint Completion — Next-Version Implementation (March 2026)
 
-### Priority 1: Two-Factor Authentication Plugin (2FA/TOTP)
-**Why first**: The most critical security feature missing. Any production auth system needs 2FA.
+The following items from the roadmap were completed in this sprint (all have open PRs):
 
-**Scope**: TOTP (Google Authenticator compatible), backup codes, enable/disable per user, verification during sign-in.
+| Item | PR | Status |
+|------|----|--------|
+| Restructure repo (flatten packages/betterauth) | #9 | ✅ Merged |
+| Refactor org plugin (split routes, add repository layer) | #9 | ✅ Merged |
+| Two-Factor Auth (TOTP) plugin | #9 | ✅ Merged |
+| Microsoft OAuth provider | #15 | ✅ PR open |
+| Slack OAuth provider | #15 | ✅ PR open |
+| GitLab OAuth provider | #15 | ✅ PR open |
+| sqlx adapter (Postgres/MySQL/SQLite) | #11 | ✅ PR open |
+| Chi framework adapter | #14 | ✅ PR open |
+| Gin framework adapter | #14 | ✅ PR open |
+| Magic Link plugin | #16 | ✅ PR open |
+| API Key plugin | #13 | ✅ PR open |
+| JWT plugin | #12 | ✅ PR open |
 
-### Priority 2: More OAuth Social Providers
-**Why second**: Low effort (~100-150 lines each), high impact on adoption.
+---
 
-**Order**: Discord → Microsoft → GitLab → Slack → Twitter → LinkedIn → Facebook
+## Recommended Priority Order (Updated)
 
-### Priority 3: Official Database Adapters (sqlx-based)
-**Why third**: Production readiness. The current Postgres adapter is an example, not official.
+### Priority 1: Remaining OAuth Providers
+**Why first**: Low effort, high adoption impact. Microsoft/Slack/GitLab are done. Remaining:
 
-**Scope**: Unified sqlx adapter for PostgreSQL, MySQL, SQLite with auto-migration.
+**Order**: Discord → Twitter/X → LinkedIn → Facebook
 
-### Priority 4: Framework Integration Adapters
-**Order**: Chi → Gin → Echo → Fiber
+Discord is highest priority — the developer community is heavily Discord-based.
 
-### Priority 5: Additional High-Value Plugins
-**Order**: Magic Link → API Key → JWT → Username → Email OTP → Passkey/WebAuthn
+### Priority 2: Echo + Fiber Framework Adapters
+**Why second**: Chi and Gin are done. Echo and Fiber complete the major Go web framework coverage.
+
+### Priority 3: Username Plugin
+**Why third**: Simple feature — allow users to authenticate with username instead of / in addition to email. Low effort, commonly requested.
+
+### Priority 4: Email OTP Plugin
+Similar to Magic Link but delivers a short numeric code instead of a URL. Useful for mobile apps.
+
+### Priority 5: Passkey / WebAuthn Plugin
+**Why fifth**: Higher effort but growing adoption. The Web Authentication API is now supported in all major browsers.
+
+**Dependencies**: `github.com/go-webauthn/webauthn`
 
 ### Priority 6: Core Concept Completeness
-Secondary storage (Redis), dynamic base URL, expanded docs, test coverage.
+- **Secondary storage (Redis)** — session caching, rate limit state
+- **Dynamic base URL** — multi-tenant setups where base URL varies per request
+- **Multi-session plugin** — allow multiple active sessions per user with device tracking
+- **Anonymous plugin** — temporary anonymous sessions that can be upgraded
+
+### Priority 7: Authorization Adapter
+Define the `Authorizer` interface in core and ship an optional Casbin adapter (`authz/casbin/`).
+The built-in RBAC in admin/org plugins remains the zero-dependency default.
 
 ---
 
-## Summary: Recommended Execution Sequence
+## Gap Analysis (Updated)
+
+### Authentication Providers
+
+| Provider | TypeScript | Go Port |
+|----------|-----------|---------|
+| Email/Password | ✅ | ✅ |
+| Google | ✅ | ✅ |
+| GitHub | ✅ | ✅ |
+| Apple | ✅ | ✅ |
+| Microsoft | ✅ | ✅ |
+| Slack | ✅ | ✅ |
+| GitLab | ✅ | ✅ |
+| Discord | ✅ | planned |
+| Twitter/X | ✅ | planned |
+| LinkedIn | ✅ | planned |
+| Facebook | ✅ | planned |
+
+### Plugins
+
+| Plugin | TypeScript | Go Port |
+|--------|-----------|---------|
+| Admin | ✅ | ✅ |
+| Organization | ✅ | ✅ |
+| Two-Factor (TOTP) | ✅ | ✅ |
+| Magic Link | ✅ | ✅ |
+| API Key | ✅ | ✅ |
+| JWT | ✅ | ✅ |
+| Email OTP | ✅ | planned |
+| Passkey (WebAuthn) | ✅ | planned |
+| Username | ✅ | planned |
+| Multi-Session | ✅ | planned |
+| Anonymous | ✅ | planned |
+| Phone Number | ✅ | planned |
+| SSO (SAML) | ✅ | future |
+| OIDC Provider | ✅ | future |
+
+### Database Adapters
+
+| Adapter | TypeScript | Go Port |
+|---------|-----------|---------|
+| PostgreSQL | ✅ | ✅ (sqlx) |
+| MySQL | ✅ | ✅ (sqlx) |
+| SQLite | ✅ | ✅ (sqlx) |
+| MongoDB | ✅ | future |
+| In-Memory | ✅ | ✅ |
+
+### Framework Integrations
+
+| Framework | Status |
+|-----------|--------|
+| net/http (stdlib) | ✅ |
+| Chi | ✅ |
+| Gin | ✅ |
+| Echo | planned |
+| Fiber | planned |
+| gorilla/mux | planned |
+
+---
+
+## Summary: Next Execution Sequence
 
 | Order | Item | Category | Effort | Impact |
 |-------|------|----------|--------|--------|
-| 0a | Restructure repo (flatten packages/betterauth) | Infra | Medium | High |
-| 0b | Refactor org plugin (split routes, add repository layer) | Infra | Medium | High |
-| 0c | Merge Organization plugin PR | Plugin | Done | High |
-| 1 | Two-Factor Auth (TOTP) plugin | Plugin | Medium | Very High |
-| 2 | Discord + Microsoft OAuth | Auth Provider | Low | High |
-| 3 | GitLab + Slack + Twitter OAuth | Auth Provider | Low | Medium |
-| 4 | sqlx adapter (Postgres/MySQL/SQLite) | DB Adapter | Medium-High | Very High |
-| 5 | Chi framework adapter | Integration | Low | High |
-| 6 | Gin framework adapter | Integration | Low | High |
-| 7 | Magic Link plugin | Plugin | Low-Medium | Medium |
-| 8 | API Key plugin | Plugin | Medium | High |
-| 9 | JWT plugin | Plugin | Medium | High |
-| 10 | Echo + Fiber adapters | Integration | Low-Medium | Medium |
-| 11 | Username plugin | Plugin | Low | Medium |
-| 12 | Passkey/WebAuthn plugin | Plugin | High | Medium |
-| 13 | Secondary Storage (Redis) | Core | Medium | Medium |
+| 1 | Discord OAuth | Auth Provider | Low | High |
+| 2 | Twitter/X OAuth | Auth Provider | Low | Medium |
+| 3 | LinkedIn + Facebook OAuth | Auth Provider | Low | Medium |
+| 4 | Echo + Fiber adapters | Integration | Low | Medium |
+| 5 | Username plugin | Plugin | Low | Medium |
+| 6 | Email OTP plugin | Plugin | Low | Medium |
+| 7 | Passkey/WebAuthn plugin | Plugin | High | Medium |
+| 8 | Multi-Session plugin | Plugin | Medium | Medium |
+| 9 | Anonymous plugin | Plugin | Low | Low |
+| 10 | Secondary Storage (Redis) | Core | Medium | Medium |
+| 11 | Casbin authorization adapter | Authz | Medium | Medium |
+| 12 | Phone Number plugin | Plugin | Medium | Low |
