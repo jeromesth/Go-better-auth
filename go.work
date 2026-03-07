@@ -1,8 +1,8 @@
-go 1.24.7
+go 1.25.0
 
 use (
 	.
-	./testutil
-	./examples/backend
 	./e2e
+	./examples/backend
+	./testutil
 )
