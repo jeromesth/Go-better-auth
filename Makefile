@@ -2,15 +2,15 @@
 
 ## Build all packages
 build:
-	cd packages/betterauth && go build ./...
-	cd packages/testutil && go build ./...
+	go build ./...
+	cd testutil && go build ./...
 
 ## Run all tests (unit + e2e)
 test: test-unit e2e
 
 ## Run unit tests only
 test-unit:
-	cd packages/betterauth && go test ./...
+	go test ./...
 
 ## Run end-to-end tests
 e2e:
@@ -30,27 +30,27 @@ e2e-adapter:
 
 ## Run all tests with verbose output
 test-verbose:
-	cd packages/betterauth && go test -v ./...
+	go test -v ./...
 	cd e2e && go test -v ./...
 
 ## Format code
 fmt:
-	gofmt -w packages/ e2e/
+	gofmt -w . e2e/
 
 ## Run go vet
 vet:
-	cd packages/betterauth && go vet ./...
+	go vet ./...
 	cd e2e && go vet ./...
 
 ## Run linter (requires golangci-lint)
 lint:
 	@command -v golangci-lint >/dev/null 2>&1 || { echo "golangci-lint not installed. See https://golangci-lint.run/usage/install/"; exit 1; }
-	cd packages/betterauth && golangci-lint run ./...
+	golangci-lint run ./...
 
 ## Tidy all modules
 tidy:
-	cd packages/betterauth && go mod tidy
-	cd packages/testutil && go mod tidy
+	go mod tidy
+	cd testutil && go mod tidy
 	cd e2e && go mod tidy
 
 ## Clean build caches

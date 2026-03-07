@@ -1,6 +1,6 @@
 module github.com/jeromesth/go-better-auth/e2e
 
-go 1.24.7
+go 1.25.0
 
 require github.com/jeromesth/go-better-auth v0.0.0
 
