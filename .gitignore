@@ -32,3 +32,6 @@ go.work.sum
 
 # Git worktrees
 .worktrees/
+
+# Claude Code worktrees
+.claude/worktrees/
