@@ -85,9 +85,16 @@ func New(opts BetterAuthOptions) *Auth {
 
 	// Register built-in social providers.
 	a.socialProviders = map[string]social.SocialProvider{
-		"google": social.Google{},
-		"github": social.GitHub{},
-		"apple":  social.Apple{},
+		"google":    social.Google{},
+		"github":    social.GitHub{},
+		"apple":     social.Apple{},
+		"microsoft": social.Microsoft{},
+		"slack":     social.Slack{},
+		"gitlab":    social.GitLab{},
+		"discord":   social.Discord{},
+		"twitter":   social.Twitter{},
+		"linkedin":  social.LinkedIn{},
+		"facebook":  social.Facebook{},
 	}
 
 	// Pass auth reference to AuthAware plugins before initialization.

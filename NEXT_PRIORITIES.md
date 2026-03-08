@@ -394,24 +394,32 @@ type Authorizer interface {
 
 ---
 
-## Sprint Completion — Next-Version Implementation (March 2026)
+## Sprint 1 Completion — Foundation & Core (Completed)
 
-The following items from the roadmap were completed in this sprint (all have open PRs):
+| Item | PR | Status |
+|------|----|--------|
+| Core auth (email/password, sessions, OAuth) | — | ✅ Merged |
+| Admin plugin (RBAC, user management, impersonation) | #5 | ✅ Merged |
+| Organization plugin (multi-tenancy, members, invitations) | #5, #8, #9 | ✅ Merged |
+| Security hardening (open redirect, IP config, org invariants) | — | ✅ Merged |
+
+## Sprint 2 Completion — Next-Version Implementation (March 2026)
+
+All PRs from Sprint 2 are now merged:
 
 | Item | PR | Status |
 |------|----|--------|
 | Restructure repo (flatten packages/betterauth) | #9 | ✅ Merged |
-| Refactor org plugin (split routes, add repository layer) | #9 | ✅ Merged |
+| Refactor org plugin (split routes, add repository layer) | #10 | ✅ Merged |
 | Two-Factor Auth (TOTP) plugin | #9 | ✅ Merged |
-| Microsoft OAuth provider | #15 | ✅ PR open |
-| Slack OAuth provider | #15 | ✅ PR open |
-| GitLab OAuth provider | #15 | ✅ PR open |
-| sqlx adapter (Postgres/MySQL/SQLite) | #11 | ✅ PR open |
-| Chi framework adapter | #14 | ✅ PR open |
-| Gin framework adapter | #14 | ✅ PR open |
-| Magic Link plugin | #16 | ✅ PR open |
-| API Key plugin | #13 | ✅ PR open |
-| JWT plugin | #12 | ✅ PR open |
+| sqlx adapter (Postgres/MySQL/SQLite) | #11 | ✅ Merged |
+| JWT plugin | #12 | ✅ Merged |
+| API Key plugin | #13 | ✅ Merged |
+| Chi framework adapter | #14 | ✅ Merged |
+| Gin framework adapter | #14 | ✅ Merged |
+| Microsoft, Slack, GitLab OAuth providers | #15 | ✅ Merged |
+| Magic Link plugin | #16 | ✅ Merged |
+| Bump Go minimum to 1.25.0, fix Makefile | #18 | ✅ Merged |
 
 ---
 
@@ -510,19 +518,99 @@ The built-in RBAC in admin/org plugins remains the zero-dependency default.
 
 ---
 
-## Summary: Next Execution Sequence
+## Current State Assessment (March 8, 2026)
+
+### Codebase Metrics
+- **64 source files**, **20 test files**, **~9,650 lines of Go** (excluding tests)
+- **6 plugins** shipped: Admin, Organization, TOTP, Magic Link, API Key, JWT
+- **6 OAuth providers**: Google, GitHub, Apple, Microsoft, Slack, GitLab
+- **2 database adapters**: Memory (testing), sqlx (PostgreSQL/MySQL/SQLite)
+- **2 framework adapters**: Chi, Gin (plus native net/http)
+- **Repo structure**: Clean flat layout at root, Go workspace with `go.work`
+
+### What's Strong
+- Core auth flows are complete and tested (sign-up, sign-in, sign-out, sessions, password reset, email verification)
+- Plugin architecture is mature — interface-based with hooks, schemas, endpoints, middleware
+- Good variety of plugins covering the most common auth needs
+- Production database support via sqlx (3 engines)
+- Framework adapter pattern is established and easy to extend
+
+### What's Missing (vs TypeScript better-auth)
+- **4 OAuth providers** remain: Discord, Twitter/X, LinkedIn, Facebook
+- **2 framework adapters**: Echo, Fiber
+- **6 planned plugins**: Username, Email OTP, Passkey/WebAuthn, Multi-Session, Anonymous, Phone Number
+- **Core gaps**: Secondary storage (Redis), dynamic base URL
+- **No e2e tests** currently (directory exists but is empty of real tests)
+- **Test coverage** could be deeper — some plugins have minimal tests
+
+---
+
+## Sprint 3 Proposal — Recommended Next Tasks
+
+### Batch A: Quick Wins (Low Effort, High Impact)
+
+These can all be done in parallel — each is self-contained and follows established patterns.
+
+| # | Task | Effort | Impact | Notes |
+|---|------|--------|--------|-------|
+| A1 | **Discord OAuth provider** | Low | High | Developer community standard. Follow `social/github.go` pattern. |
+| A2 | **Twitter/X OAuth provider** | Low | Medium | OAuth 2.0 (not 1.0a). Follow same pattern. |
+| A3 | **LinkedIn OAuth provider** | Low | Medium | Standard OAuth 2.0. |
+| A4 | **Facebook OAuth provider** | Low | Medium | Standard OAuth 2.0. |
+| A5 | **Echo framework adapter** | Low | Medium | Follow `framework/chi/` pattern. Echo is the #3 Go web framework. |
+| A6 | **Fiber framework adapter** | Low | Medium | Follow same pattern. Fiber uses fasthttp (not net/http) — needs slightly different approach. |
+
+**Estimated batch effort**: 1 sprint. All 6 items follow existing patterns closely.
+
+### Batch B: Simple Plugins (Low-Medium Effort)
+
+| # | Task | Effort | Impact | Notes |
+|---|------|--------|--------|-------|
+| B1 | **Username plugin** | Low | Medium | Allow username-based auth alongside email. Add `username` field to user model. |
+| B2 | **Email OTP plugin** | Low | Medium | Like Magic Link but sends a 6-digit code. Shares verification infrastructure. |
+| B3 | **Anonymous plugin** | Low | Low | Temporary sessions upgradeable to full accounts. Simple session hook. |
+
+### Batch C: Higher-Effort Features
+
+| # | Task | Effort | Impact | Notes |
+|---|------|--------|--------|-------|
+| C1 | **Passkey/WebAuthn plugin** | High | High | Depends on `go-webauthn/webauthn`. Registration + authentication ceremonies. Most complex plugin. |
+| C2 | **Secondary storage (Redis)** | Medium | Medium | Define `SecondaryStorage` interface, ship Redis adapter. Enables session caching and distributed rate limiting. |
+| C3 | **Multi-Session plugin** | Medium | Medium | Device tracking, concurrent session limits. Extends session model with device info. |
+| C4 | **Improve test coverage** | Medium | High | Add integration tests for sqlx adapter, framework adapters, and deeper plugin testing. Populate `e2e/` directory. |
+
+### Batch D: Future (Not This Sprint)
+
+| # | Task | Effort | Notes |
+|---|------|--------|-------|
+| D1 | Casbin authorization adapter | Medium | Define `Authorizer` interface first |
+| D2 | Phone Number plugin | Medium | Needs SMS provider integration |
+| D3 | SSO (SAML) plugin | High | Enterprise feature |
+| D4 | OIDC Provider plugin | High | Turn the library into an OIDC provider |
+| D5 | MongoDB adapter | Medium | Different query model |
+
+---
+
+## Recommended Sprint 3 Execution Order
+
+**Phase 1** (parallelize): A1-A4 (4 OAuth providers) + A5 (Echo adapter)
+**Phase 2** (parallelize): A6 (Fiber adapter) + B1 (Username plugin) + B2 (Email OTP plugin)
+**Phase 3**: C4 (Test coverage improvements)
+**Phase 4**: C1 (Passkey/WebAuthn) — this is the flagship feature for Sprint 3
+
+### Summary: Sprint 3 Execution Sequence
 
 | Order | Item | Category | Effort | Impact |
 |-------|------|----------|--------|--------|
 | 1 | Discord OAuth | Auth Provider | Low | High |
 | 2 | Twitter/X OAuth | Auth Provider | Low | Medium |
-| 3 | LinkedIn + Facebook OAuth | Auth Provider | Low | Medium |
-| 4 | Echo + Fiber adapters | Integration | Low | Medium |
-| 5 | Username plugin | Plugin | Low | Medium |
-| 6 | Email OTP plugin | Plugin | Low | Medium |
-| 7 | Passkey/WebAuthn plugin | Plugin | High | Medium |
-| 8 | Multi-Session plugin | Plugin | Medium | Medium |
-| 9 | Anonymous plugin | Plugin | Low | Low |
-| 10 | Secondary Storage (Redis) | Core | Medium | Medium |
-| 11 | Casbin authorization adapter | Authz | Medium | Medium |
-| 12 | Phone Number plugin | Plugin | Medium | Low |
+| 3 | LinkedIn OAuth | Auth Provider | Low | Medium |
+| 4 | Facebook OAuth | Auth Provider | Low | Medium |
+| 5 | Echo adapter | Integration | Low | Medium |
+| 6 | Fiber adapter | Integration | Low | Medium |
+| 7 | Username plugin | Plugin | Low | Medium |
+| 8 | Email OTP plugin | Plugin | Low | Medium |
+| 9 | Test coverage improvements | Quality | Medium | High |
+| 10 | Passkey/WebAuthn plugin | Plugin | High | High |
+| 11 | Anonymous plugin | Plugin | Low | Low |
+| 12 | Secondary Storage (Redis) | Core | Medium | Medium |
