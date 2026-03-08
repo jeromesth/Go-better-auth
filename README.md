@@ -35,7 +35,7 @@ Go Better Auth is a Go port of the [better-auth](https://github.com/better-auth/
 ## Features
 
 - Email/password authentication (scrypt hashing, configurable)
-- OAuth 2.0 social login (Google, GitHub, Apple, Microsoft, Slack, GitLab)
+- OAuth 2.0 social login (Google, GitHub, Apple, Microsoft, Slack, GitLab, Discord, Twitter/X, LinkedIn, Facebook)
 - Session management (cookie + Bearer token)
 - Email verification and password reset
 - Magic Link passwordless authentication
@@ -45,7 +45,9 @@ Go Better Auth is a Go port of the [better-auth](https://github.com/better-auth/
 - Rate limiting
 - Plugin system (endpoints, schemas, hooks, middleware)
 - Database adapters: in-memory (testing) + sqlx (PostgreSQL, MySQL, SQLite)
-- Framework adapters: Chi, Gin (and stdlib net/http natively)
+- Username-based authentication
+- Email OTP (one-time password) authentication
+- Framework adapters: Chi, Gin, Echo (and stdlib net/http natively)
 - Admin plugin (RBAC, user management, impersonation)
 - Organization plugin (multi-tenancy, members, invitations)
 
@@ -94,14 +96,17 @@ go-better-auth/
 │   └── sqlx/           # sqlx adapter (PostgreSQL, MySQL, SQLite)
 ├── framework/          # Framework router adapters
 │   ├── chi/            # Chi adapter
+│   ├── echo/           # Echo adapter
 │   └── gin/            # Gin adapter
 ├── plugins/            # Plugin implementations
 │   ├── admin/          # Admin plugin (RBAC, user management)
 │   ├── apikey/         # API Key plugin
+│   ├── emailotp/       # Email OTP plugin
 │   ├── jwt/            # JWT plugin
 │   ├── magiclink/      # Magic Link plugin
 │   ├── organization/   # Organization/multi-tenancy plugin
-│   └── totp/           # TOTP / 2FA plugin
+│   ├── totp/           # TOTP / 2FA plugin
+│   └── username/       # Username authentication plugin
 ├── social/             # OAuth provider implementations
 ├── plugin/             # Plugin interface definitions
 ├── session/            # Session management
@@ -126,8 +131,10 @@ go-better-auth/
 | Microsoft | ✅ |
 | Slack | ✅ |
 | GitLab | ✅ |
-| Discord | planned |
-| Twitter/X | planned |
+| Discord | ✅ |
+| Twitter/X | ✅ |
+| LinkedIn | ✅ |
+| Facebook | ✅ |
 
 ## Plugins
 
@@ -139,8 +146,9 @@ go-better-auth/
 | JWT | ✅ | `plugins/jwt` |
 | API Key | ✅ | `plugins/apikey` |
 | Magic Link | ✅ | `plugins/magiclink` |
+| Username | ✅ | `plugins/username` |
+| Email OTP | ✅ | `plugins/emailotp` |
 | Passkey/WebAuthn | planned | — |
-| Username | planned | — |
 | Phone Number | planned | — |
 
 ## API Endpoints
