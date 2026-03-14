@@ -1,235 +1,149 @@
-# Sprint 3 Implementation Plan
+# Sprint 3 — Next Phase Plan
 
 ## Current State (March 14, 2026)
 
-### Already Implemented (on `master`)
+### On `master`
 - **Core auth**: Email/password, sessions, OAuth, password reset, email verification
-- **6 plugins**: Admin, Organization, TOTP, Magic Link, API Key, JWT
-- **7 OAuth providers**: Google, GitHub, Apple, Microsoft, Slack, GitLab
+- **8 plugins**: Admin, Organization, TOTP, Magic Link, API Key, JWT, Username, Email OTP
+- **11 OAuth providers**: Google, GitHub, Apple, Microsoft, Slack, GitLab, Discord, Twitter/X, LinkedIn, Facebook
 - **DB adapters**: Memory, sqlx (PostgreSQL/MySQL/SQLite)
-- **Framework adapters**: Chi, Gin
-- **E2e tests**: Smoke (116 lines), integration (187 lines), adapter (132 lines)
+- **Framework adapters**: Chi, Gin, Echo
 
-### Already Implemented (on `master`, but listed as "planned" in NEXT_PRIORITIES.md)
-These items exist in the codebase already — they were implemented as part of Sprint 2 or early Sprint 3 work:
+### On Feature Branches (not yet merged)
 
-| Item | Status | Notes |
-|------|--------|-------|
-| Discord OAuth | ✅ Implemented | `social/discord.go` + `discord_test.go` (104 lines) |
-| Twitter/X OAuth | ✅ Implemented | `social/twitter.go` + `twitter_test.go` (121 lines) |
-| LinkedIn OAuth | ✅ Implemented | `social/linkedin.go` + `linkedin_test.go` (86 lines) |
-| Facebook OAuth | ✅ Implemented | `social/facebook.go` + `facebook_test.go` (91 lines) |
-| Echo adapter | ✅ Implemented | `framework/echo/echo.go` + `echo_test.go` (14 lines) |
-| Username plugin | ✅ Implemented | `plugins/username/username.go` (325 lines, **no tests**) |
-| Email OTP plugin | ✅ Implemented | `plugins/emailotp/emailotp.go` (263 lines, **no tests**) |
-
-### Not Yet Implemented
-| Item | Priority | Effort |
-|------|----------|--------|
-| Fiber framework adapter | Medium | Low |
-| Username plugin tests | High | Low |
-| Email OTP plugin tests | High | Low |
-| Passkey/WebAuthn plugin | High | High |
-| Secondary storage (Redis) | Medium | Medium |
-| Multi-Session plugin | Medium | Medium |
-| Anonymous plugin | Low | Low |
-| Deeper test coverage | High | Medium |
+| Branch | Content | Status |
+|--------|---------|--------|
+| `claude/sprint3-test-coverage-Jy5kV` | Username + Email OTP plugin tests | Ready for merge |
+| `claude/sprint3-fiber-anonymous-Jy5kV` | Fiber adapter + Anonymous plugin | Needs fixes |
+| `claude/sprint3-passkey-webauthn-Jy5kV` | Passkey/WebAuthn plugin | Needs fixes |
+| `claude/sprint3-storage-multisession-Jy5kV` | Storage layer + Multi-session plugin | Needs rework |
+| `claude/sprint3-shared-fixes-Jy5kV` | Empty (only deletes test files) | Discard |
 
 ---
 
-## Sprint 3 Implementation Plan
+## Branch Issues & Required Fixes
 
-### Phase 1: Test Coverage for Existing Untested Code (Priority: HIGH)
+### Issue: All feature branches delete test files
+Every feature branch (`fiber-anonymous`, `passkey-webauthn`, `storage-multisession`) deletes `emailotp_test.go` and `username_test.go` from the test-coverage branch. This is a rebase/merge artifact. **Fix**: Rebase each branch on test-coverage preserving the test files.
 
-Two plugins shipped without tests. This is a quality gap that must be addressed first.
+### PR 1: Test Coverage (`sprint3-test-coverage`)
+**Status**: Ready to merge as-is.
+- Adds comprehensive tests for Username plugin (9 test cases)
+- Adds comprehensive tests for Email OTP plugin (8 test cases)
+- No code changes needed
 
-#### 1a. Username Plugin Tests (`plugins/username/username_test.go`)
+### PR 2: Fiber + Anonymous (`sprint3-fiber-anonymous`)
+**Fixes needed**:
+1. **Restore deleted test files** — Rebase on test-coverage properly
+2. **Fiber adapter is minimal and correct** (16 lines) — No changes needed
+3. **Anonymous plugin looks solid** — No major issues found
 
-Test cases:
-- **Sign-up happy path**: Register with username + email + password, verify session cookie returned
-- **Sign-in happy path**: Sign in with correct username/password, verify session returned
-- **Username too short**: Reject usernames shorter than `MinLength`
-- **Username too long**: Reject usernames longer than `MaxLength`
-- **Duplicate username**: Return 409 when username is taken
-- **Duplicate email**: Return 409 when email is already in use
-- **Missing fields**: Return 400 for missing username, email, password
-- **Wrong password on sign-in**: Return 401
-- **Unknown username on sign-in**: Return 401
+### PR 3: Passkey/WebAuthn (`sprint3-passkey-webauthn`)
+**Fixes needed**:
+1. **Restore deleted test files** — Rebase on test-coverage properly
+2. **Bug: `backed_up` field used for both `BackupState` and `BackupEligible`** — In `recordToCredential()`, the same `rec["backed_up"]` is assigned to both `cred.Flags.BackupState` and `cred.Flags.BackupEligible`. These are different WebAuthn flags. Fix: store `backup_eligible` separately, or derive from `device_type` (`multi_device` = backup eligible).
+3. **Missing session-create hooks** — `handleLoginFinish` creates a session without running `RunSessionCreateHooks`. Other plugins (e.g., multi-session) won't intercept passkey logins.
+4. **Login finish: `ValidateDiscoverableLogin` used as fallback for non-discoverable** — In the non-discoverable flow, the code tries `ValidateDiscoverableLogin` first, then falls back to `ValidateLogin`. It should just use `ValidateLogin` directly when `sessionData.UserID` is set.
+5. **Delete endpoint path matching** — `extractPasskeyID` splits on `/` and takes the last segment, which works but is fragile. Consider a cleaner approach.
 
-#### 1b. Email OTP Plugin Tests (`plugins/emailotp/emailotp_test.go`)
+### PR 4: Multi-Session (reworked, **without** storage layer)
+**Decision**: Split storage layer into a future PR. Ship multi-session standalone.
 
-Test cases:
-- **Send OTP happy path**: Send OTP to a registered email, verify `SendOTP` callback called with 6-digit code
-- **Send OTP to unknown email**: Should return success (no user enumeration)
-- **Verify OTP happy path**: Valid code creates a session
-- **Verify wrong code**: Return 401
-- **Verify expired code**: Return 401
-- **Verify consumed code**: Cannot reuse the same code after verification
-- **Missing fields**: Return 400 for missing email or code
-- **Custom code length**: Verify `CodeLength` option works
+**Fixes needed**:
+1. **Remove storage layer entirely** — Delete `storage/`, `storage/memory/`, `storage/redis/` directories. Remove `SecondaryStorage` from `BetterAuthOptions` (or mark as "not yet implemented").
+2. **Fail-closed on errors** — Change `onSessionCreate` to return errors from `FindMany` and `Delete` instead of swallowing them. Matches TS behavior where errors propagate.
+   ```go
+   // Before (fail-open):
+   if err != nil {
+       return nil
+   }
+   // After (fail-closed):
+   if err != nil {
+       return fmt.Errorf("checking session count: %w", err)
+   }
+   ```
+3. **Return delete errors** — Stop discarding `Delete` errors:
+   ```go
+   // Before:
+   _ = adp.Delete(ctx, "session", ...)
+   // After:
+   if err := adp.Delete(ctx, "session", ...); err != nil {
+       return fmt.Errorf("revoking oldest session: %w", err)
+   }
+   ```
+4. **Remove device info schema columns** — The `device_name`, `device_type`, `os`, `browser` columns are never populated. Remove them from `Schema()`. Keep runtime UA parsing in `handleList` only.
+5. **Accept TOCTOU race** — Match TS behavior: pre-creation check without locking. The session limit is a soft guarantee, not a hard security boundary. Document this clearly in the Options struct.
+6. **Restore deleted test files** — Rebase on test-coverage properly.
 
-### Phase 2: Fiber Framework Adapter (Priority: MEDIUM)
+---
 
-**File**: `framework/fiber/fiber.go`
+## Future: Storage Layer (Separate PR, Sprint 4)
 
-Fiber uses `fasthttp` instead of `net/http`, so it can't simply wrap `auth.Handler()`. It needs an adapter that:
-1. Converts Fiber's `*fiber.Ctx` to `net/http` request/response
-2. Uses `fasthttpadaptor` to bridge the two
-3. Mounts all auth routes under a configurable path
+When there is a concrete consumer (session caching, rate limiting, challenge storage), ship the storage layer with:
 
-**File**: `framework/fiber/fiber_test.go`
+1. **Unified interface** — Replace both `SecondaryStorage` in `options.go` and `storage.Store` with one interface:
+   ```go
+   type Store interface {
+       Get(ctx context.Context, key string) (value string, found bool, err error)
+       Set(ctx context.Context, key string, value string, ttl time.Duration) error
+       SetNX(ctx context.Context, key string, value string, ttl time.Duration) (bool, error)
+       Delete(ctx context.Context, key string) error
+       Close() error
+   }
+   ```
+2. **Fix memory store TOCTOU** — Re-verify under write lock before deleting expired entries
+3. **Add `Close()` to Redis impl** — Prevent connection pool leaks
+4. **Add Redis to `go.mod`** — Currently missing
+5. **Wire into `Auth`** with a concrete consumer
 
-Test that auth endpoints work through the Fiber adapter (sign-up, sign-in, get-session round-trip).
+---
 
-**Dependencies**: `github.com/gofiber/fiber/v3` (or v2)
+## Merge Order
 
-### Phase 3: Anonymous Plugin (Priority: LOW-MEDIUM)
-
-**Directory**: `plugins/anonymous/`
-
-A simple plugin that creates temporary anonymous sessions that can later be upgraded to full accounts via linking credentials.
-
-**Files**:
-- `plugins/anonymous/anonymous.go` — Plugin struct, endpoints
-- `plugins/anonymous/anonymous_test.go` — Tests
-
-**Endpoints**:
-- `POST /sign-in/anonymous` — Creates a temporary user and session
-- `POST /anonymous/link` — Links credentials (email/password) to an anonymous user, upgrading them
-
-**Schema extensions**:
-- Add `is_anonymous` boolean field to the `user` table
-
-**Behavior**:
-- Anonymous users get a temporary name (e.g., "Guest-abc123")
-- Sessions work identically to regular sessions (cookies, expiry)
-- Linking credentials removes the `is_anonymous` flag
-- Optional: auto-expire anonymous users after configurable duration
-
-### Phase 4: Passkey/WebAuthn Plugin (Priority: HIGH, Effort: HIGH)
-
-This is the flagship feature for Sprint 3. Uses the `go-webauthn/webauthn` library.
-
-**Directory**: `plugins/passkey/`
-
-**Files**:
-- `plugins/passkey/passkey.go` — Plugin struct, options, schema
-- `plugins/passkey/routes.go` — HTTP handlers
-- `plugins/passkey/passkey_test.go` — Tests
-
-**Schema** (new `passkey` table):
-```sql
-CREATE TABLE passkey (
-    id              TEXT PRIMARY KEY,
-    user_id         TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
-    credential_id   TEXT NOT NULL UNIQUE,
-    public_key      BLOB NOT NULL,
-    counter         INTEGER NOT NULL DEFAULT 0,
-    device_type     TEXT,
-    backed_up       BOOLEAN NOT NULL DEFAULT FALSE,
-    transports      TEXT,  -- JSON array
-    name            TEXT,  -- user-friendly name
-    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+```
+master
+  └─ PR 1: test-coverage (merge first)
+       └─ PR 2: fiber-anonymous (rebase on test-coverage, fix, merge)
+       └─ PR 3: passkey-webauthn (rebase on test-coverage, fix, merge)
+       └─ PR 4: multi-session (rework on test-coverage, merge)
 ```
 
-**Endpoints**:
-- `POST /passkey/register/begin` — Start registration ceremony (returns challenge + options)
-- `POST /passkey/register/finish` — Complete registration (store credential)
-- `POST /passkey/login/begin` — Start authentication ceremony (returns challenge)
-- `POST /passkey/login/finish` — Complete authentication (verify assertion, create session)
-- `GET /passkey/list` — List registered passkeys for current user
-- `DELETE /passkey/{id}` — Remove a passkey
-
-**Implementation approach**:
-1. Store challenges in the `verification` table (reuse existing infrastructure)
-2. Implement `webauthn.User` interface adapter for our User model
-3. Registration flow: begin → browser creates credential → finish stores it
-4. Authentication flow: begin → browser signs challenge → finish verifies and creates session
-5. Support multiple passkeys per user
-
-**Dependencies**: `github.com/go-webauthn/webauthn`
-
-### Phase 5: Secondary Storage Interface + Redis Adapter (Priority: MEDIUM)
-
-**Purpose**: Enable session caching and distributed rate limiting via Redis.
-
-**Files**:
-- `storage/storage.go` — `SecondaryStorage` interface definition
-- `storage/redis/redis.go` — Redis implementation
-- `storage/redis/redis_test.go` — Tests (use miniredis for testing)
-
-**Interface**:
-```go
-type SecondaryStorage interface {
-    Get(ctx context.Context, key string) (string, error)
-    Set(ctx context.Context, key string, value string, ttl time.Duration) error
-    Delete(ctx context.Context, key string) error
-}
-```
-
-**Integration points**:
-- Session resolution: Check cache before hitting DB
-- Rate limiting: Store counters in Redis for distributed deployments
-- TOTP challenges, WebAuthn challenges: Store ephemeral state
-
-**Dependencies**: `github.com/redis/go-redis/v9`
-
-### Phase 6: Multi-Session Plugin (Priority: MEDIUM)
-
-**Directory**: `plugins/multisession/`
-
-**Purpose**: Track device info per session and enforce concurrent session limits.
-
-**Files**:
-- `plugins/multisession/multisession.go`
-- `plugins/multisession/multisession_test.go`
-
-**Schema extension** (additional fields on `session` table):
-- `device_name` TEXT
-- `device_type` TEXT (mobile/desktop/tablet)
-- `os` TEXT
-- `browser` TEXT
-
-**Endpoints**:
-- `GET /multi-session/list` — List active sessions with device info
-- `POST /multi-session/revoke` — Revoke a specific session by ID
-- `POST /multi-session/revoke-all-others` — Revoke all but current
-
-**Options**:
-- `MaxSessions int` — Maximum concurrent sessions (0 = unlimited)
-- `OnMaxSessionsReached` — Callback: "revoke-oldest" or "deny-new"
-
-**Behavior**:
-- Parses User-Agent to extract device/browser/OS info
-- Enforces `MaxSessions` limit on session creation (via session-create hook)
+PRs 2, 3, 4 are independent and can be worked on in parallel after PR 1 merges.
 
 ---
 
-## Execution Order
+## Execution Plan
 
-| Order | Phase | Items | Effort | Impact |
-|-------|-------|-------|--------|--------|
-| 1 | Phase 1a | Username plugin tests | Low | High (quality) |
-| 2 | Phase 1b | Email OTP plugin tests | Low | High (quality) |
-| 3 | Phase 2 | Fiber framework adapter | Low | Medium |
-| 4 | Phase 3 | Anonymous plugin | Low | Low-Medium |
-| 5 | Phase 4 | Passkey/WebAuthn plugin | High | High |
-| 6 | Phase 5 | Secondary storage + Redis | Medium | Medium |
-| 7 | Phase 6 | Multi-Session plugin | Medium | Medium |
+### Phase 1: Merge test coverage
+1. Review and merge `sprint3-test-coverage` branch
+2. Run `cd packages/betterauth && go test ./...` to confirm all green
 
-**Phases 1a + 1b** can be parallelized.
-**Phases 2 + 3** can be parallelized (independent features).
-**Phases 5 + 6** can be parallelized.
-**Phase 4** (Passkey) is the largest item and should be the primary focus once tests are in place.
+### Phase 2: Fix and merge feature branches (parallelizable)
 
----
+#### 2a: Fiber + Anonymous
+1. Rebase on merged test-coverage (restore test files)
+2. Run tests, format check
+3. Open PR, merge
 
-## Out of Scope (Sprint 4+)
+#### 2b: Passkey/WebAuthn
+1. Rebase on merged test-coverage (restore test files)
+2. Fix `BackupEligible` vs `BackupState` bug
+3. Add `RunSessionCreateHooks` call in `handleLoginFinish`
+4. Simplify login finish flow (remove discoverable fallback for known-user path)
+5. Run tests, format check
+6. Open PR, merge
 
-- Phone Number plugin (needs SMS provider integration)
-- SSO/SAML plugin (enterprise feature, high effort)
-- OIDC Provider plugin (turn library into an OIDC provider)
-- MongoDB adapter (different query paradigm)
-- Casbin authorization adapter (define `Authorizer` interface first)
-- gorilla/mux adapter (community can contribute; deprecated upstream)
+#### 2c: Multi-Session (rework)
+1. Create new branch from test-coverage
+2. Copy multi-session plugin code (without storage layer)
+3. Apply fail-closed fixes
+4. Remove device info schema columns
+5. Add clear documentation about TOCTOU behavior
+6. Run tests, format check
+7. Open PR, merge
+
+### Phase 3: Sprint 4 planning
+- Secondary storage layer (with concrete consumer)
+- Phone Number plugin
+- Deeper e2e test coverage
+- Organization plugin route splitting + repository pattern (from NEXT_PRIORITIES.md)
