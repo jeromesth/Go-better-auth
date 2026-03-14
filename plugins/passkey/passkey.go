@@ -276,8 +276,8 @@ func recordToCredential(rec map[string]any) *webauthn.Credential {
 	if bu, ok := rec["backed_up"].(bool); ok {
 		cred.Flags.BackupState = bu
 	}
-	if be, ok := rec["backed_up"].(bool); ok {
-		cred.Flags.BackupEligible = be
+	if dt, ok := rec["device_type"].(string); ok {
+		cred.Flags.BackupEligible = dt == "multi_device"
 	}
 
 	return cred

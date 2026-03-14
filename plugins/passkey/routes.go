@@ -3,10 +3,12 @@ package passkey
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/jeromesth/go-better-auth/internal"
+	"github.com/jeromesth/go-better-auth/plugin"
 	"github.com/jeromesth/go-better-auth/session"
 
 	"github.com/go-webauthn/webauthn/protocol"
@@ -261,20 +263,10 @@ func (p *Plugin) handleLoginFinish(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		credential, err = p.webauthn.ValidateDiscoverableLogin(
-			func(_, userHandle []byte) (webauthn.User, error) {
-				return waUser, nil
-			},
-			*sessionData,
-			parsedResponse,
-		)
+		credential, err = p.webauthn.ValidateLogin(waUser, *sessionData, parsedResponse)
 		if err != nil {
-			// Try standard login validation as fallback.
-			credential, err = p.webauthn.ValidateLogin(waUser, *sessionData, parsedResponse)
-			if err != nil {
-				writeError(w, http.StatusUnauthorized, "AUTHENTICATION_FAILED", "Authentication failed: "+err.Error())
-				return
-			}
+			writeError(w, http.StatusUnauthorized, "AUTHENTICATION_FAILED", "Authentication failed: "+err.Error())
+			return
 		}
 		userID = userIDStr
 	} else {
@@ -304,6 +296,14 @@ func (p *Plugin) handleLoginFinish(w http.ResponseWriter, r *http.Request) {
 	if findErr == nil && passkeyRec != nil {
 		passkeyID, _ := passkeyRec["id"].(string)
 		_ = p.updatePasskeyCounter(ctx, passkeyID, credential.Authenticator.SignCount)
+	}
+
+	// Run session-create hooks (e.g., multi-session limits).
+	if err := p.auth.RunSessionCreateHooks(w, r, userID); err != nil {
+		if !errors.Is(err, plugin.ErrHandled) {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+		}
+		return
 	}
 
 	// Create a session for the user.
