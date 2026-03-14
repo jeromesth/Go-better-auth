@@ -62,17 +62,10 @@ func (p *Plugin) SetAuth(auth any) {
 }
 
 // Schema returns the database schema extensions for the multi-session plugin.
+// Device info (device_name, device_type, os, browser) is parsed at read time
+// from the user_agent field rather than stored in dedicated columns.
 func (p *Plugin) Schema() map[string]plugin.TableSchema {
-	return map[string]plugin.TableSchema{
-		"session": {
-			Fields: []plugin.FieldDef{
-				{Name: "device_name", Type: "text", Required: false},
-				{Name: "device_type", Type: "text", Required: false},
-				{Name: "os", Type: "text", Required: false},
-				{Name: "browser", Type: "text", Required: false},
-			},
-		},
-	}
+	return map[string]plugin.TableSchema{}
 }
 
 // Endpoints returns all multi-session API endpoints.
@@ -109,7 +102,7 @@ func (p *Plugin) onSessionCreate(scc plugin.SessionCreateContext) error {
 		SortDir: "asc",
 	})
 	if err != nil {
-		return nil // Don't block session creation on lookup errors.
+		return fmt.Errorf("checking session count: %w", err)
 	}
 
 	// Filter to only non-expired sessions.
@@ -134,9 +127,11 @@ func (p *Plugin) onSessionCreate(scc plugin.SessionCreateContext) error {
 		for i := 0; i < toRemove && i < len(active); i++ {
 			id, _ := active[i]["id"].(string)
 			if id != "" {
-				_ = adp.Delete(ctx, "session", adapter.Query{
+				if err := adp.Delete(ctx, "session", adapter.Query{
 					Where: []adapter.Where{adapter.EQ("id", id)},
-				})
+				}); err != nil {
+					return fmt.Errorf("revoking oldest session: %w", err)
+				}
 			}
 		}
 	}

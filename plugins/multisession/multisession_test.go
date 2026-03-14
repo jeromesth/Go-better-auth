@@ -495,33 +495,12 @@ func TestPluginSchema(t *testing.T) {
 	p := multisession.New(nil)
 	schema := p.Schema()
 
-	sessionSchema, ok := schema["session"]
-	if !ok {
-		t.Fatal("expected session table in schema")
-	}
-
-	expectedFields := map[string]bool{
-		"device_name": false,
-		"device_type": false,
-		"os":          false,
-		"browser":     false,
-	}
-
-	for _, f := range sessionSchema.Fields {
-		if _, ok := expectedFields[f.Name]; ok {
-			expectedFields[f.Name] = true
-			if f.Type != "text" {
-				t.Errorf("field %q type = %q, want %q", f.Name, f.Type, "text")
+	// Schema should be empty — device info is parsed at read time from user_agent.
+	if len(schema) != 0 {
+		for table, ts := range schema {
+			if len(ts.Fields) > 0 {
+				t.Errorf("expected no schema fields, but table %q has %d fields", table, len(ts.Fields))
 			}
-			if f.Required {
-				t.Errorf("field %q should not be required", f.Name)
-			}
-		}
-	}
-
-	for name, found := range expectedFields {
-		if !found {
-			t.Errorf("expected field %q in schema", name)
 		}
 	}
 }
