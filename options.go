@@ -14,12 +14,13 @@ type GenerateIDFn func(model string) string
 
 // BetterAuthOptions is the main configuration struct for the auth system.
 type BetterAuthOptions struct {
-	AppName           string
-	BaseURL           string
-	BasePath          string // default: "/api/auth"
-	Secret            string
-	Database          *DatabaseConfig
-	SecondaryStorage  SecondaryStorage
+	AppName  string
+	BaseURL  string
+	BasePath string // default: "/api/auth"
+	Secret   string
+	Database *DatabaseConfig
+	// SecondaryStorage is not yet implemented.
+	// SecondaryStorage SecondaryStorage
 	EmailVerification *EmailVerifConfig
 	EmailAndPassword  *EmailPassConfig
 	SocialProviders   map[string]social.ProviderConfig
@@ -40,12 +41,12 @@ type DatabaseConfig struct {
 	GenerateID           GenerateIDFn
 }
 
-// SecondaryStorage is an optional key-value store for session caching.
-type SecondaryStorage interface {
-	Get(key string) ([]byte, error)
-	Set(key string, value []byte, ttl int) error
-	Delete(key string) error
-}
+// SecondaryStorage is not yet implemented.
+// type SecondaryStorage interface {
+// 	Get(key string) ([]byte, error)
+// 	Set(key string, value []byte, ttl int) error
+// 	Delete(key string) error
+// }
 
 // SessionConfig configures session behavior.
 type SessionConfig struct {
