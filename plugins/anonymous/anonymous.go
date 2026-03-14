@@ -8,7 +8,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	betterauth "github.com/jeromesth/go-better-auth"
@@ -73,7 +75,7 @@ func (p *Plugin) handleSignInAnonymous(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ia := p.auth.InternalAdapter()
 
-	anonID := randomHex(6)
+	anonID := randomHex(16)
 	email := "anon-" + anonID + "@" + p.opts.EmailDomain
 	name := p.opts.GuestNamePrefix + anonID
 
@@ -157,6 +159,7 @@ func (p *Plugin) handleLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 	if req.Email == "" {
 		writeErr(w, http.StatusBadRequest, "MISSING_EMAIL", "email is required")
 		return
@@ -164,6 +167,19 @@ func (p *Plugin) handleLink(w http.ResponseWriter, r *http.Request) {
 	if req.Password == "" {
 		writeErr(w, http.StatusBadRequest, "MISSING_PASSWORD", "password is required")
 		return
+	}
+
+	// Validate password length against EmailAndPassword config.
+	epCfg := p.auth.Options().EmailAndPassword
+	if epCfg != nil {
+		if epCfg.MinPasswordLength > 0 && len(req.Password) < epCfg.MinPasswordLength {
+			writeErr(w, http.StatusBadRequest, "PASSWORD_TOO_SHORT", fmt.Sprintf("password must be at least %d characters", epCfg.MinPasswordLength))
+			return
+		}
+		if epCfg.MaxPasswordLength > 0 && len(req.Password) > epCfg.MaxPasswordLength {
+			writeErr(w, http.StatusBadRequest, "PASSWORD_TOO_LONG", fmt.Sprintf("password must be at most %d characters", epCfg.MaxPasswordLength))
+			return
+		}
 	}
 
 	// Check that the email isn't already in use.
