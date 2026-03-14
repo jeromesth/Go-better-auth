@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -225,10 +226,16 @@ func TestVerifyOTP_WrongCode(t *testing.T) {
 		t.Fatalf("send OTP failed: %d %s", rr.Code, rr.Body.String())
 	}
 
+	// Use a deterministically wrong code.
+	wrongCode := "000000"
+	if capture.lastCode() == wrongCode {
+		wrongCode = "111111"
+	}
+
 	// Verify with wrong code.
 	rr = postJSON(t, h, "/api/auth/email-otp/verify", map[string]string{
 		"email": "alice@test.com",
-		"code":  "000000",
+		"code":  wrongCode,
 	})
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 for wrong code, got %d: %s", rr.Code, rr.Body.String())
@@ -244,8 +251,7 @@ func TestVerifyOTP_ExpiredCode(t *testing.T) {
 	capture := &otpCapture{}
 	memAdapter := memory.New()
 	p := emailotp.New(emailotp.Options{
-		SendOTP:     capture.sendOTP,
-		TokenExpiry: 1 * time.Millisecond, // Extremely short expiry for testing.
+		SendOTP: capture.sendOTP,
 	})
 	a := betterauth.New(betterauth.BetterAuthOptions{
 		AppName:  "EmailOTP Expiry Test",
@@ -279,12 +285,10 @@ func TestVerifyOTP_ExpiredCode(t *testing.T) {
 		t.Fatal("no OTP code captured")
 	}
 
-	// Wait for expiry.
-	time.Sleep(50 * time.Millisecond)
-
-	// Now also manually expire the verification record to be safe.
-	// The adapter stores time.Time so we update it to the past.
-	_, _ = memAdapter.Update(context.Background(), "verification", adapter.Query{}, map[string]any{
+	// Deterministically expire the verification record by setting expires_at to the past.
+	_, _ = memAdapter.Update(context.Background(), "verification", adapter.Query{
+		Where: []adapter.Where{adapter.EQ("identifier", "email-otp:alice@test.com")},
+	}, map[string]any{
 		"expires_at": time.Now().Add(-1 * time.Hour),
 	})
 
@@ -411,5 +415,68 @@ func TestVerifyOTP_CustomCodeLength(t *testing.T) {
 	}
 	if resp["session"] == nil {
 		t.Fatal("expected session in response")
+	}
+}
+
+func TestVerifyOTP_ReplayAttack(t *testing.T) {
+	capture := &otpCapture{}
+	p := emailotp.New(emailotp.Options{
+		SendOTP: capture.sendOTP,
+	})
+	_, h := newTestAuth(t, p)
+
+	registerUser(t, h, "alice@test.com")
+
+	// Send OTP.
+	rr := postJSON(t, h, "/api/auth/email-otp/send", map[string]string{
+		"email": "alice@test.com",
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("send OTP failed: %d %s", rr.Code, rr.Body.String())
+	}
+
+	code := capture.lastCode()
+	if code == "" {
+		t.Fatal("no OTP code captured")
+	}
+
+	// First verification should succeed.
+	rr = postJSON(t, h, "/api/auth/email-otp/verify", map[string]string{
+		"email": "alice@test.com",
+		"code":  code,
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("first verify expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Replay: second verification with the same code should fail.
+	rr = postJSON(t, h, "/api/auth/email-otp/verify", map[string]string{
+		"email": "alice@test.com",
+		"code":  code,
+	})
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("replay attack: expected 401, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestSendOTP_InvalidJSON(t *testing.T) {
+	p := emailotp.New(emailotp.Options{
+		SendOTP: func(_ context.Context, _, _ string) error { return nil },
+	})
+	_, h := newTestAuth(t, p)
+
+	// Send malformed JSON.
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/email-otp/send", strings.NewReader("{invalid"))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid JSON, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	resp := decodeResp(t, rr)
+	if resp["code"] != "INVALID_JSON" {
+		t.Errorf("expected code=INVALID_JSON, got %v", resp["code"])
 	}
 }

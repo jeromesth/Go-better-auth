@@ -16,7 +16,8 @@ import (
 
 // --- Test helpers ---
 
-func newTestAuth(p *username.Plugin) http.Handler {
+func newTestAuth(t *testing.T, p *username.Plugin) http.Handler {
+	t.Helper()
 	auth := betterauth.New(betterauth.BetterAuthOptions{
 		AppName:  "Username Test",
 		BasePath: "/api/auth",
@@ -36,14 +37,11 @@ func newTestAuth(p *username.Plugin) http.Handler {
 	return auth.Handler()
 }
 
-func postJSON(t *testing.T, h http.Handler, path string, body any, cookies []*http.Cookie) *httptest.ResponseRecorder {
+func postJSON(t *testing.T, h http.Handler, path string, body any) *httptest.ResponseRecorder {
 	t.Helper()
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
-	for _, c := range cookies {
-		req.AddCookie(c)
-	}
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	return rr
@@ -62,14 +60,14 @@ func decodeResp(t *testing.T, rr *httptest.ResponseRecorder) map[string]any {
 
 func TestSignUpHappyPath(t *testing.T) {
 	p := username.New(username.Options{})
-	h := newTestAuth(p)
+	h := newTestAuth(t, p)
 
 	rr := postJSON(t, h, "/api/auth/sign-up/username", map[string]string{
 		"username": "alice",
 		"email":    "alice@test.com",
 		"password": "password123",
 		"name":     "Alice",
-	}, nil)
+	})
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
@@ -114,13 +112,13 @@ func TestSignUpHappyPath(t *testing.T) {
 
 func TestSignUpDefaultName(t *testing.T) {
 	p := username.New(username.Options{})
-	h := newTestAuth(p)
+	h := newTestAuth(t, p)
 
 	rr := postJSON(t, h, "/api/auth/sign-up/username", map[string]string{
 		"username": "bob",
 		"email":    "bob@test.com",
 		"password": "password123",
-	}, nil)
+	})
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
@@ -136,14 +134,14 @@ func TestSignUpDefaultName(t *testing.T) {
 
 func TestSignInHappyPath(t *testing.T) {
 	p := username.New(username.Options{})
-	h := newTestAuth(p)
+	h := newTestAuth(t, p)
 
 	// First, sign up.
 	rr := postJSON(t, h, "/api/auth/sign-up/username", map[string]string{
 		"username": "alice",
 		"email":    "alice@test.com",
 		"password": "password123",
-	}, nil)
+	})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("sign-up failed: %d %s", rr.Code, rr.Body.String())
 	}
@@ -152,7 +150,7 @@ func TestSignInHappyPath(t *testing.T) {
 	rr = postJSON(t, h, "/api/auth/sign-in/username", map[string]string{
 		"username": "alice",
 		"password": "password123",
-	}, nil)
+	})
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
@@ -169,13 +167,13 @@ func TestSignInHappyPath(t *testing.T) {
 
 func TestUsernameTooShort(t *testing.T) {
 	p := username.New(username.Options{MinLength: 3})
-	h := newTestAuth(p)
+	h := newTestAuth(t, p)
 
 	rr := postJSON(t, h, "/api/auth/sign-up/username", map[string]string{
 		"username": "ab",
 		"email":    "short@test.com",
 		"password": "password123",
-	}, nil)
+	})
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
@@ -189,14 +187,14 @@ func TestUsernameTooShort(t *testing.T) {
 
 func TestUsernameTooLong(t *testing.T) {
 	p := username.New(username.Options{MaxLength: 10})
-	h := newTestAuth(p)
+	h := newTestAuth(t, p)
 
 	longName := strings.Repeat("a", 11)
 	rr := postJSON(t, h, "/api/auth/sign-up/username", map[string]string{
 		"username": longName,
 		"email":    "long@test.com",
 		"password": "password123",
-	}, nil)
+	})
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
@@ -210,14 +208,14 @@ func TestUsernameTooLong(t *testing.T) {
 
 func TestDuplicateUsername(t *testing.T) {
 	p := username.New(username.Options{})
-	h := newTestAuth(p)
+	h := newTestAuth(t, p)
 
 	// Sign up first user.
 	rr := postJSON(t, h, "/api/auth/sign-up/username", map[string]string{
 		"username": "alice",
 		"email":    "alice@test.com",
 		"password": "password123",
-	}, nil)
+	})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("first sign-up failed: %d %s", rr.Code, rr.Body.String())
 	}
@@ -227,7 +225,7 @@ func TestDuplicateUsername(t *testing.T) {
 		"username": "alice",
 		"email":    "alice2@test.com",
 		"password": "password123",
-	}, nil)
+	})
 
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("expected 409, got %d: %s", rr.Code, rr.Body.String())
@@ -241,14 +239,14 @@ func TestDuplicateUsername(t *testing.T) {
 
 func TestDuplicateEmail(t *testing.T) {
 	p := username.New(username.Options{})
-	h := newTestAuth(p)
+	h := newTestAuth(t, p)
 
 	// Sign up first user.
 	rr := postJSON(t, h, "/api/auth/sign-up/username", map[string]string{
 		"username": "alice",
 		"email":    "alice@test.com",
 		"password": "password123",
-	}, nil)
+	})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("first sign-up failed: %d %s", rr.Code, rr.Body.String())
 	}
@@ -258,7 +256,7 @@ func TestDuplicateEmail(t *testing.T) {
 		"username": "bob",
 		"email":    "alice@test.com",
 		"password": "password123",
-	}, nil)
+	})
 
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("expected 409, got %d: %s", rr.Code, rr.Body.String())
@@ -272,13 +270,13 @@ func TestDuplicateEmail(t *testing.T) {
 
 func TestMissingFields(t *testing.T) {
 	p := username.New(username.Options{})
-	h := newTestAuth(p)
+	h := newTestAuth(t, p)
 
 	t.Run("missing username", func(t *testing.T) {
 		rr := postJSON(t, h, "/api/auth/sign-up/username", map[string]string{
 			"email":    "nouser@test.com",
 			"password": "password123",
-		}, nil)
+		})
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
 		}
@@ -288,7 +286,7 @@ func TestMissingFields(t *testing.T) {
 		rr := postJSON(t, h, "/api/auth/sign-up/username", map[string]string{
 			"username": "nomail",
 			"password": "password123",
-		}, nil)
+		})
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
 		}
@@ -302,7 +300,7 @@ func TestMissingFields(t *testing.T) {
 		rr := postJSON(t, h, "/api/auth/sign-up/username", map[string]string{
 			"username": "nopass",
 			"email":    "nopass@test.com",
-		}, nil)
+		})
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
 		}
@@ -315,14 +313,14 @@ func TestMissingFields(t *testing.T) {
 
 func TestSignInWrongPassword(t *testing.T) {
 	p := username.New(username.Options{})
-	h := newTestAuth(p)
+	h := newTestAuth(t, p)
 
 	// Sign up.
 	rr := postJSON(t, h, "/api/auth/sign-up/username", map[string]string{
 		"username": "alice",
 		"email":    "alice@test.com",
 		"password": "password123",
-	}, nil)
+	})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("sign-up failed: %d %s", rr.Code, rr.Body.String())
 	}
@@ -331,7 +329,7 @@ func TestSignInWrongPassword(t *testing.T) {
 	rr = postJSON(t, h, "/api/auth/sign-in/username", map[string]string{
 		"username": "alice",
 		"password": "wrongpassword",
-	}, nil)
+	})
 
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d: %s", rr.Code, rr.Body.String())
@@ -345,12 +343,12 @@ func TestSignInWrongPassword(t *testing.T) {
 
 func TestSignInUnknownUsername(t *testing.T) {
 	p := username.New(username.Options{})
-	h := newTestAuth(p)
+	h := newTestAuth(t, p)
 
 	rr := postJSON(t, h, "/api/auth/sign-in/username", map[string]string{
 		"username": "nonexistent",
 		"password": "password123",
-	}, nil)
+	})
 
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d: %s", rr.Code, rr.Body.String())
@@ -364,11 +362,11 @@ func TestSignInUnknownUsername(t *testing.T) {
 
 func TestSignInMissingUsername(t *testing.T) {
 	p := username.New(username.Options{})
-	h := newTestAuth(p)
+	h := newTestAuth(t, p)
 
 	rr := postJSON(t, h, "/api/auth/sign-in/username", map[string]string{
 		"password": "password123",
-	}, nil)
+	})
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
