@@ -101,8 +101,8 @@ func New(opts *Options) *Plugin {
 
 func (p *Plugin) ID() string { return "admin" }
 
-func (p *Plugin) SetAuth(auth any) {
-	p.auth = auth.(*betterauth.Auth)
+func (p *Plugin) SetAuth(auth *betterauth.Auth) {
+	p.auth = auth
 	p.repo = newRepository(p.auth)
 }
 

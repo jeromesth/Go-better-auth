@@ -44,8 +44,8 @@ func New(opts Options) *Plugin {
 
 func (p *Plugin) ID() string { return "magiclink" }
 
-func (p *Plugin) SetAuth(auth any) {
-	p.auth = auth.(*betterauth.Auth)
+func (p *Plugin) SetAuth(auth *betterauth.Auth) {
+	p.auth = auth
 }
 
 // Endpoints registers /magic-link/send and /magic-link/verify.
