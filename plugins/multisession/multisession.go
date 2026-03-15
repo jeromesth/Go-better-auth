@@ -57,8 +57,8 @@ func New(opts *Options) *Plugin {
 
 func (p *Plugin) ID() string { return "multi-session" }
 
-func (p *Plugin) SetAuth(auth any) {
-	p.auth = auth.(*betterauth.Auth)
+func (p *Plugin) SetAuth(auth *betterauth.Auth) {
+	p.auth = auth
 }
 
 // Schema returns the database schema extensions for the multi-session plugin.

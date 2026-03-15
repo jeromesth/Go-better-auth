@@ -92,10 +92,10 @@ type UserCreateHookProvider interface {
 // -- Optional capability interfaces plugins can implement --
 
 // AuthAware is implemented by plugins that need a reference to the auth instance.
-// The auth instance is passed as `any` to avoid circular imports.
-// Plugins should type-assert to the concrete *Auth type.
-type AuthAware interface {
-	SetAuth(auth any)
+// The type parameter T is the concrete auth type (e.g. *betterauth.Auth),
+// enabling compile-time type safety without circular imports.
+type AuthAware[T any] interface {
+	SetAuth(auth T)
 }
 
 // Initializer is implemented by plugins that need initialization.

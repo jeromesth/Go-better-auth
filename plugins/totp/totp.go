@@ -48,12 +48,8 @@ func New(opts *Options) *Plugin {
 
 func (p *Plugin) ID() string { return "totp" }
 
-func (p *Plugin) SetAuth(auth any) {
-	a, ok := auth.(*betterauth.Auth)
-	if !ok {
-		return
-	}
-	p.auth = a
+func (p *Plugin) SetAuth(auth *betterauth.Auth) {
+	p.auth = auth
 }
 
 // Schema extends the database with a totp table.
