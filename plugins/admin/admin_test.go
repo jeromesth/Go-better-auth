@@ -113,8 +113,6 @@ func getUserID(t *testing.T, h http.Handler, cookies []*http.Cookie) string {
 // promoteToAdmin sets a user's role to admin directly via the internal adapter.
 func promoteToAdmin(t *testing.T, auth *betterauth.Auth, userID string) {
 	t.Helper()
-	ctx := auth.Handler().(http.Handler)
-	_ = ctx // just to suppress unused warning
 	_, err := auth.InternalAdapter().UpdateUserRaw(t.Context(), userID, map[string]any{
 		"role": "admin",
 	})
