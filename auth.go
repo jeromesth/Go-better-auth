@@ -4,6 +4,7 @@
 package betterauth
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -116,8 +117,10 @@ func New(opts BetterAuthOptions) *Auth {
 
 	// Initialize plugins.
 	for _, p := range opts.Plugins {
-		if init, ok := p.(plugin.Initializer); ok {
-			_, _ = init.Init()
+		if initializer, ok := p.(plugin.Initializer); ok {
+			if _, err := initializer.Init(); err != nil {
+				panic(fmt.Sprintf("go-better-auth: plugin %q initialization failed: %v", p.ID(), err))
+			}
 		}
 	}
 
