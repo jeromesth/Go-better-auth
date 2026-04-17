@@ -114,22 +114,44 @@ func TestSignUpAndSignIn(t *testing.T) {
 	}
 }
 
-func TestSignUpDuplicateEmail(t *testing.T) {
+func TestSignUp_Errors(t *testing.T) {
 	t.Parallel()
-	auth := newTestAuth()
-	h := auth.Handler()
 
-	body := map[string]string{
-		"email":    "dup@example.com",
-		"password": "password123",
-		"name":     "User",
+	tests := []struct {
+		name     string
+		setup    func(auth *betterauth.Auth)
+		email    string
+		password string
+		wantCode int
+	}{
+		{
+			name:     "duplicate email",
+			setup:    func(auth *betterauth.Auth) { signUp(t, auth, "taken@example.com", "password123") },
+			email:    "taken@example.com",
+			password: "password123",
+			wantCode: http.StatusConflict,
+		},
+		{
+			name:     "password too short",
+			setup:    func(_ *betterauth.Auth) {},
+			email:    "new@example.com",
+			password: "x",
+			wantCode: http.StatusBadRequest,
+		},
 	}
 
-	postJSON(t, h, "/api/auth/sign-up/email", body, nil)
-	rr := postJSON(t, h, "/api/auth/sign-up/email", body, nil)
-
-	if rr.Code != http.StatusConflict {
-		t.Fatalf("expected 409 on duplicate email, got %d: %s", rr.Code, rr.Body.String())
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			auth := newTestAuth()
+			tc.setup(auth)
+			w := postJSON(t, auth.Handler(), "/api/auth/sign-up/email",
+				map[string]any{"email": tc.email, "password": tc.password, "name": "Test User"}, nil)
+			if w.Code != tc.wantCode {
+				t.Errorf("got %d, want %d", w.Code, tc.wantCode)
+			}
+		})
 	}
 }
 
@@ -151,22 +173,6 @@ func TestSignInWrongPassword(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 on wrong password, got %d: %s", rr.Code, rr.Body.String())
-	}
-}
-
-func TestPasswordTooShort(t *testing.T) {
-	t.Parallel()
-	auth := newTestAuth()
-	h := auth.Handler()
-
-	rr := postJSON(t, h, "/api/auth/sign-up/email", map[string]string{
-		"email":    "short@example.com",
-		"password": "abc",
-		"name":     "User",
-	}, nil)
-
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 on short password, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
 
