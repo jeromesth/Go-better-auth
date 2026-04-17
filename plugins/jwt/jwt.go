@@ -42,8 +42,10 @@ func New(opts Options) *Plugin {
 	return &Plugin{opts: opts}
 }
 
+// ID returns the unique identifier for this plugin.
 func (p *Plugin) ID() string { return "jwt" }
 
+// SetAuth injects the Auth instance so the plugin can access session and storage.
 func (p *Plugin) SetAuth(auth any) {
 	a, ok := auth.(*betterauth.Auth)
 	if !ok {
