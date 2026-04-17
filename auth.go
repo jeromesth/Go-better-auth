@@ -32,6 +32,21 @@ type Auth struct {
 
 // New creates a new Auth instance with the provided options.
 // Sensible defaults are applied for any unset fields.
+//
+// New panics if any plugin's Init method returns an error. Plugin initialization
+// failures indicate a programming error (misconfiguration, missing dependency)
+// rather than a recoverable runtime condition, so panicking at startup is
+// preferable to returning a silently broken Auth instance. Wrap the call in a
+// recover if you need to handle Init failures gracefully:
+//
+//	func newAuth(opts BetterAuthOptions) (a *Auth, err error) {
+//	    defer func() {
+//	        if r := recover(); r != nil {
+//	            err = fmt.Errorf("auth init failed: %v", r)
+//	        }
+//	    }()
+//	    return New(opts), nil
+//	}
 func New(opts BetterAuthOptions) *Auth {
 	defaults := defaultOptions()
 
@@ -119,7 +134,9 @@ func New(opts BetterAuthOptions) *Auth {
 		}
 	}
 
-	// Initialize plugins.
+	// Initialize plugins. Any Init error is treated as a programming error
+	// (misconfiguration, missing dependency) and panics immediately rather than
+	// allowing a partially configured Auth instance to be returned to the caller.
 	for _, p := range opts.Plugins {
 		if initializer, ok := p.(plugin.Initializer); ok {
 			if _, err := initializer.Init(); err != nil {
