@@ -187,10 +187,6 @@ There are two main ways to contribute:
 1. **Code** - Open a PR with bug fixes, new features, or adapter implementations
 2. **Issues** - Report bugs or request features via [GitHub Issues](https://github.com/jeromesth/Go-better-auth/issues)
 
-## Security
-
-If you discover a security vulnerability, please report it responsibly. See [SECURITY.md](SECURITY.md) for details.
-
 ## License
 
 [MIT](LICENSE)
