@@ -1,7 +1,6 @@
 package magiclink_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -13,13 +12,16 @@ import (
 	"github.com/jeromesth/go-better-auth/adapter/memory"
 	"github.com/jeromesth/go-better-auth/plugin"
 	"github.com/jeromesth/go-better-auth/plugins/magiclink"
+	testutil "github.com/jeromesth/go-better-auth/testutil"
 )
+
+const basePath = "/api/auth"
 
 func newTestAuth(t *testing.T, p *magiclink.Plugin) (*betterauth.Auth, http.Handler) {
 	t.Helper()
 	a := betterauth.New(betterauth.BetterAuthOptions{
 		AppName:  "MagicLink Test",
-		BasePath: "/api/auth",
+		BasePath: basePath,
 		Secret:   "test-secret",
 		Database: &betterauth.DatabaseConfig{
 			Adapter: memory.New(),
@@ -36,22 +38,9 @@ func newTestAuth(t *testing.T, p *magiclink.Plugin) (*betterauth.Auth, http.Hand
 	return a, a.Handler()
 }
 
-func postJSON(t *testing.T, h http.Handler, path string, body any, cookies []*http.Cookie) *httptest.ResponseRecorder {
-	t.Helper()
-	b, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(b))
-	req.Header.Set("Content-Type", "application/json")
-	for _, c := range cookies {
-		req.AddCookie(c)
-	}
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, req)
-	return rr
-}
-
 func registerUser(t *testing.T, h http.Handler, email string) {
 	t.Helper()
-	rr := postJSON(t, h, "/api/auth/sign-up/email", map[string]string{
+	rr := testutil.PostJSON(t, h, basePath+"/sign-up/email", map[string]string{
 		"email": email, "password": "password123", "name": "Test",
 	}, nil)
 	if rr.Code != http.StatusOK {
@@ -86,7 +75,7 @@ func TestMagicLink_SendAndVerify(t *testing.T) {
 	registerUser(t, h, "magic@example.com")
 
 	// Request magic link
-	rr := postJSON(t, h, "/api/auth/magic-link/send", map[string]string{
+	rr := testutil.PostJSON(t, h, basePath+"/magic-link/send", map[string]string{
 		"email": "magic@example.com",
 	}, nil)
 	if rr.Code != http.StatusOK {
@@ -108,7 +97,7 @@ func TestMagicLink_SendAndVerify(t *testing.T) {
 	}
 
 	// Verify the magic link
-	req := httptest.NewRequest(http.MethodGet, "/api/auth/magic-link/verify?token="+token, nil)
+	req := httptest.NewRequest(http.MethodGet, basePath+"/magic-link/verify?token="+token, nil)
 	rrv := httptest.NewRecorder()
 	h.ServeHTTP(rrv, req)
 
@@ -137,7 +126,7 @@ func TestMagicLink_UnknownEmail(t *testing.T) {
 	})
 	_, h := newTestAuth(t, p)
 
-	rr := postJSON(t, h, "/api/auth/magic-link/send", map[string]string{
+	rr := testutil.PostJSON(t, h, basePath+"/magic-link/send", map[string]string{
 		"email": "nobody@example.com",
 	}, nil)
 	// Should return 200 (don't leak user existence) and not call sender
@@ -157,7 +146,7 @@ func TestMagicLink_InvalidToken(t *testing.T) {
 	})
 	_, h := newTestAuth(t, p)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/auth/magic-link/verify?token=invalidtoken", nil)
+	req := httptest.NewRequest(http.MethodGet, basePath+"/magic-link/verify?token=invalidtoken", nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
@@ -174,7 +163,7 @@ func TestMagicLink_MissingEmail(t *testing.T) {
 	})
 	_, h := newTestAuth(t, p)
 
-	rr := postJSON(t, h, "/api/auth/magic-link/send", map[string]string{}, nil)
+	rr := testutil.PostJSON(t, h, basePath+"/magic-link/send", map[string]string{}, nil)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for missing email, got %d", rr.Code)
 	}
