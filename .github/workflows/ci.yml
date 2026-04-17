@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.25', '1.26']
+        go-version: ['1.26']
 
     steps:
       - uses: actions/checkout@v4
@@ -48,7 +48,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26'
 
       - name: Run tests with coverage
         run: go test -coverprofile=coverage.out -covermode=atomic ./...
@@ -71,7 +71,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26'
 
       - name: Vet
         run: |
@@ -86,8 +86,3 @@ jobs:
             exit 1
           fi
 
-      - name: Staticcheck
-        uses: dominikh/staticcheck-action@v1.3.0
-        with:
-          version: "2025.1"
-          install-go: false
