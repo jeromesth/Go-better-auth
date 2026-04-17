@@ -33,6 +33,12 @@ jobs:
       - name: E2E Tests
         run: cd e2e && go test ./...
 
+      - name: Testutil Module Build
+        run: cd testutil && go build ./...
+
+      - name: Examples Module Build
+        run: cd examples/backend && go build ./...
+
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
@@ -79,3 +85,9 @@ jobs:
             gofmt -d . e2e/
             exit 1
           fi
+
+      - name: Staticcheck
+        uses: dominikh/staticcheck-action@v1.3.0
+        with:
+          version: "2025.1"
+          install-go: false
