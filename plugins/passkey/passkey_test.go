@@ -252,34 +252,57 @@ func TestLoginBegin_ReturnsOptions(t *testing.T) {
 	}
 }
 
-func TestLoginBegin_WithEmail_NoPasskeys(t *testing.T) {
-	p := newPasskeyPlugin()
-	_, h := newTestAuth(t, p)
-	signUp(t, h) // create user but no passkeys
-
-	rr := postJSON(t, h, "/api/auth/passkey/login/begin", map[string]string{
-		"email": "user@example.com",
-	}, nil)
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for user with no passkeys, got %d: %s", rr.Code, rr.Body.String())
+// loginBeginBody runs /passkey/login/begin, asserts a 200 discoverable-login
+// response, and returns the decoded response for further assertions.
+func loginBeginBody(t *testing.T, h http.Handler, email string) map[string]any {
+	t.Helper()
+	var body any
+	if email != "" {
+		body = map[string]string{"email": email}
 	}
-
+	rr := postJSON(t, h, "/api/auth/passkey/login/begin", body, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("login begin (email=%q): %d %s", email, rr.Code, rr.Body.String())
+	}
 	var resp map[string]any
-	json.NewDecoder(rr.Body).Decode(&resp)
-	if resp["code"] != "NO_PASSKEYS" {
-		t.Errorf("expected code=NO_PASSKEYS, got %v", resp["code"])
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
 	}
+	return resp
 }
 
-func TestLoginBegin_WithEmail_UserNotFound(t *testing.T) {
+// TestLoginBegin_DoesNotLeakAccountExistence verifies that /passkey/login/begin
+// returns an indistinguishable response whether the supplied email maps to an
+// existing user, a user with no passkeys, or no user at all. Any divergence
+// would let an unauthenticated attacker enumerate accounts.
+func TestLoginBegin_DoesNotLeakAccountExistence(t *testing.T) {
 	p := newPasskeyPlugin()
 	_, h := newTestAuth(t, p)
+	signUp(t, h) // registered user but no passkeys
 
-	rr := postJSON(t, h, "/api/auth/passkey/login/begin", map[string]string{
-		"email": "nobody@example.com",
-	}, nil)
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for nonexistent user, got %d", rr.Code)
+	withExistingUser := loginBeginBody(t, h, "user@example.com")
+	withUnknownUser := loginBeginBody(t, h, "nobody@example.com")
+	discoverable := loginBeginBody(t, h, "")
+
+	pk1, _ := withExistingUser["publicKey"].(map[string]any)
+	pk2, _ := withUnknownUser["publicKey"].(map[string]any)
+	pk3, _ := discoverable["publicKey"].(map[string]any)
+	if pk1 == nil || pk2 == nil || pk3 == nil {
+		t.Fatal("expected publicKey in every response")
+	}
+
+	// allowCredentials must be absent (or empty) in all three responses —
+	// its presence would signal that the email belongs to a user with passkeys.
+	for label, pk := range map[string]map[string]any{
+		"existing-user-no-passkeys": pk1,
+		"unknown-user":              pk2,
+		"discoverable":              pk3,
+	} {
+		if ac, ok := pk["allowCredentials"]; ok {
+			if list, _ := ac.([]any); len(list) != 0 {
+				t.Errorf("%s: expected no allowCredentials, got %v", label, ac)
+			}
+		}
 	}
 }
 

@@ -236,6 +236,27 @@ func recordsToCredentials(records []map[string]any) []webauthn.Credential {
 	return creds
 }
 
+// coerceUint32 normalizes a counter value read from any adapter (memory, sqlx,
+// JSON-round-tripped) into uint32, returning 0 for unknown types.
+func coerceUint32(v any) uint32 {
+	switch n := v.(type) {
+	case int:
+		return uint32(n)
+	case int64:
+		return uint32(n)
+	case int32:
+		return uint32(n)
+	case uint32:
+		return n
+	case uint64:
+		return uint32(n)
+	case float64:
+		return uint32(n)
+	default:
+		return 0
+	}
+}
+
 func recordToCredential(rec map[string]any) *webauthn.Credential {
 	credIDStr, _ := rec["credential_id"].(string)
 	pubKeyStr, _ := rec["public_key"].(string)
@@ -249,10 +270,10 @@ func recordToCredential(rec map[string]any) *webauthn.Credential {
 		return nil
 	}
 
-	counter := uint32(0)
-	if v, ok := rec["counter"].(int); ok {
-		counter = uint32(v)
-	}
+	// SQL adapters (sqlx) return INTEGER columns as int64, while the memory
+	// adapter stores the value as int. Both paths must populate SignCount or
+	// the go-webauthn library's clone-detection check is silently bypassed.
+	counter := coerceUint32(rec["counter"])
 
 	cred := &webauthn.Credential{
 		ID:              credID,

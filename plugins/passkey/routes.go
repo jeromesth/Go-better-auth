@@ -181,28 +181,24 @@ func (p *Plugin) handleLoginBegin(w http.ResponseWriter, r *http.Request) {
 	var sessionData *webauthn.SessionData
 	var err error
 
+	// Look up the user's credentials when an email is supplied, but fall back
+	// to the discoverable flow if the user is unknown or has no passkeys.
+	// Returning the same shape in every branch keeps responses indistinguishable
+	// and avoids leaking account existence, matching the pattern in
+	// handler_password.go, plugins/magiclink, and plugins/emailotp.
+	var waUser *WebAuthnUser
 	if req.Email != "" {
-		// Find user by email.
 		user, findErr := p.auth.InternalAdapter().FindUserByEmail(ctx, req.Email)
-		if findErr != nil || user == nil {
-			writeError(w, http.StatusBadRequest, "USER_NOT_FOUND", "User not found")
-			return
+		if findErr == nil && user != nil {
+			if u, getErr := p.getWebAuthnUser(ctx, user.ID); getErr == nil && u != nil && len(u.Credentials) > 0 {
+				waUser = u
+			}
 		}
+	}
 
-		waUser, getErr := p.getWebAuthnUser(ctx, user.ID)
-		if getErr != nil || waUser == nil {
-			writeError(w, http.StatusBadRequest, "USER_NOT_FOUND", "User not found")
-			return
-		}
-
-		if len(waUser.Credentials) == 0 {
-			writeError(w, http.StatusBadRequest, "NO_PASSKEYS", "No passkeys registered for this user")
-			return
-		}
-
+	if waUser != nil {
 		opts, sessionData, err = p.webauthn.BeginLogin(waUser)
 	} else {
-		// Discoverable credential flow (no user specified).
 		opts, sessionData, err = p.webauthn.BeginDiscoverableLogin()
 	}
 
