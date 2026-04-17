@@ -305,6 +305,40 @@ func TestRevokeCurrentSessionFails(t *testing.T) {
 	}
 }
 
+func TestRevokeOtherUsersSessionReturnsNotFound(t *testing.T) {
+	p := multisession.New(nil)
+	auth := newTestAuth(p)
+	h := auth.Handler()
+
+	// Victim: create a session and record its ID.
+	victimCookies := signUpUser(t, h, "victim@example.com", "password123", "Victim")
+	rr := getJSON(t, h, "/api/auth/multi-session/list", victimCookies)
+	resp := decodeResp(t, rr)
+	victimSessionID := resp["sessions"].([]any)[0].(map[string]any)["id"].(string)
+
+	// Attacker: different user attempts to revoke the victim's session.
+	attackerCookies := signUpUser(t, h, "attacker@example.com", "password123", "Attacker")
+	rr = postJSON(t, h, "/api/auth/multi-session/revoke", map[string]string{
+		"sessionId": victimSessionID,
+	}, attackerCookies)
+
+	// Must return SESSION_NOT_FOUND (same as a bogus ID) — never FORBIDDEN —
+	// so attackers cannot distinguish existing sessions from non-existent ones.
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 when revoking another user's session, got %d %s", rr.Code, rr.Body.String())
+	}
+	body := decodeResp(t, rr)
+	if code, _ := body["code"].(string); code != "SESSION_NOT_FOUND" {
+		t.Fatalf("expected code SESSION_NOT_FOUND, got %q", code)
+	}
+
+	// Victim's session must still be usable.
+	rr = getJSON(t, h, "/api/auth/multi-session/list", victimCookies)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("victim session should still work, got %d", rr.Code)
+	}
+}
+
 func TestRevokeAllOthers(t *testing.T) {
 	p := multisession.New(nil)
 	auth := newTestAuth(p)

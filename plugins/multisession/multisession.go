@@ -261,25 +261,26 @@ func (p *Plugin) handleRevoke(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	adp := p.auth.InternalAdapter().Adapter()
+	currentUserID, _ := currentSession["user_id"].(string)
 
-	// Find the target session and verify it belongs to the current user.
+	// Scope lookup to the current user so a non-existent session and a session
+	// owned by another user are indistinguishable.
 	target, err := adp.FindOne(ctx, "session", adapter.Query{
-		Where: []adapter.Where{adapter.EQ("id", req.SessionID)},
+		Where: []adapter.Where{
+			adapter.EQ("id", req.SessionID),
+			adapter.EQ("user_id", currentUserID),
+		},
 	})
 	if err != nil || target == nil {
 		writeError(w, http.StatusNotFound, "SESSION_NOT_FOUND", "Session not found")
 		return
 	}
 
-	targetUserID, _ := target["user_id"].(string)
-	currentUserID, _ := currentSession["user_id"].(string)
-	if targetUserID != currentUserID {
-		writeError(w, http.StatusForbidden, "FORBIDDEN", "Session does not belong to you")
-		return
-	}
-
 	if err := adp.Delete(ctx, "session", adapter.Query{
-		Where: []adapter.Where{adapter.EQ("id", req.SessionID)},
+		Where: []adapter.Where{
+			adapter.EQ("id", req.SessionID),
+			adapter.EQ("user_id", currentUserID),
+		},
 	}); err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to revoke session")
 		return
@@ -317,13 +318,16 @@ func (p *Plugin) handleRevokeAllOthers(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		id, _ := rec["id"].(string)
-		if id != "" {
-			if err := adp.Delete(ctx, "session", adapter.Query{
-				Where: []adapter.Where{adapter.EQ("id", id)},
-			}); err == nil {
-				revoked++
-			}
+		if id == "" {
+			continue
 		}
+		if err := adp.Delete(ctx, "session", adapter.Query{
+			Where: []adapter.Where{adapter.EQ("id", id)},
+		}); err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to revoke session")
+			return
+		}
+		revoked++
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -383,7 +387,7 @@ func ParseUserAgent(ua string) (browser, os, deviceType string) {
 		browser = "Edge"
 	case strings.Contains(ua, "OPR/") || strings.Contains(ua, "Opera"):
 		browser = "Opera"
-	case strings.Contains(ua, "Chrome/") && !strings.Contains(ua, "Edg/") && !strings.Contains(ua, "OPR/"):
+	case strings.Contains(ua, "Chrome/"):
 		browser = "Chrome"
 	case strings.Contains(ua, "Firefox/"):
 		browser = "Firefox"
