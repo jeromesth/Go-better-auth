@@ -63,6 +63,46 @@ func TestAllow_EvictsExpiredEntries(t *testing.T) {
 	}
 }
 
+func TestMiddleware_RespectsXForwardedFor(t *testing.T) {
+	rl := ratelimit.New(ratelimit.Config{Limit: 1, Window: time.Second})
+	handler := rl.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// Both requests come from the proxy IP (9.9.9.9) but carry the real client
+	// IP in X-Forwarded-For. The limiter should key on 5.6.7.8, not 9.9.9.9.
+	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
+	req1.RemoteAddr = "9.9.9.9:443"
+	req1.Header.Set("X-Forwarded-For", "5.6.7.8")
+
+	req2 := httptest.NewRequest(http.MethodGet, "/", nil)
+	req2.RemoteAddr = "9.9.9.9:443"
+	req2.Header.Set("X-Forwarded-For", "5.6.7.8")
+
+	w1 := httptest.NewRecorder()
+	handler.ServeHTTP(w1, req1)
+	if w1.Code != http.StatusOK {
+		t.Errorf("first request: got %d, want 200", w1.Code)
+	}
+
+	w2 := httptest.NewRecorder()
+	handler.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusTooManyRequests {
+		t.Errorf("second request same XFF IP: got %d, want 429", w2.Code)
+	}
+
+	// A request from a different real IP should not be rate-limited.
+	req3 := httptest.NewRequest(http.MethodGet, "/", nil)
+	req3.RemoteAddr = "9.9.9.9:443"
+	req3.Header.Set("X-Forwarded-For", "10.0.0.1")
+
+	w3 := httptest.NewRecorder()
+	handler.ServeHTTP(w3, req3)
+	if w3.Code != http.StatusOK {
+		t.Errorf("request from different XFF IP: got %d, want 200", w3.Code)
+	}
+}
+
 func TestMiddleware_UsesHostNotPort(t *testing.T) {
 	rl := ratelimit.New(ratelimit.Config{Limit: 1, Window: time.Second})
 	handler := rl.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
