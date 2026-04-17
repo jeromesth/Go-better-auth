@@ -202,6 +202,7 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Detach from the request context so this survives response completion.
 	go p.repo.touchLastUsed(context.WithoutCancel(r.Context()), rec["id"].(string))
 
 	writeJSON(w, http.StatusOK, map[string]any{

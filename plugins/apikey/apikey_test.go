@@ -2,6 +2,7 @@ package apikey_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -211,6 +212,23 @@ func TestAPIKey_RequiresAuth(t *testing.T) {
 	rr := postJSON(t, h, "/api/auth/api-key/create", map[string]string{"name": "x"}, nil)
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 without auth, got %d", rr.Code)
+	}
+}
+
+// TestWithoutCancel_SurvivesParentCancellation documents the assumption that
+// context.WithoutCancel relies on: a detached context must not inherit the
+// parent's cancellation. This is the property the goroutine in handleVerify
+// depends on — if it ever broke, the last-used update would silently drop.
+func TestWithoutCancel_SurvivesParentCancellation(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := ctx.Err(); err == nil {
+		t.Fatal("parent ctx should be cancelled")
+	}
+	detached := context.WithoutCancel(ctx)
+	if err := detached.Err(); err != nil {
+		t.Fatalf("detached ctx should not be cancelled, got %v", err)
 	}
 }
 
