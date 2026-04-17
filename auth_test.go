@@ -119,21 +119,21 @@ func TestSignUp_Errors(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		setup    func(auth *betterauth.Auth)
+		setup    func(t *testing.T, auth *betterauth.Auth)
 		email    string
 		password string
 		wantCode int
 	}{
 		{
 			name:     "duplicate email",
-			setup:    func(auth *betterauth.Auth) { signUp(t, auth, "taken@example.com", "password123") },
+			setup:    func(t *testing.T, auth *betterauth.Auth) { signUp(t, auth, "taken@example.com", "password123") },
 			email:    "taken@example.com",
 			password: "password123",
 			wantCode: http.StatusConflict,
 		},
 		{
 			name:     "password too short",
-			setup:    func(_ *betterauth.Auth) {},
+			setup:    func(_ *testing.T, _ *betterauth.Auth) {},
 			email:    "new@example.com",
 			password: "x",
 			wantCode: http.StatusBadRequest,
@@ -145,7 +145,7 @@ func TestSignUp_Errors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			auth := newTestAuth()
-			tc.setup(auth)
+			tc.setup(t, auth)
 			w := postJSON(t, auth.Handler(), "/api/auth/sign-up/email",
 				map[string]any{"email": tc.email, "password": tc.password, "name": "Test User"}, nil)
 			if w.Code != tc.wantCode {
