@@ -19,7 +19,6 @@ type BetterAuthOptions struct {
 	BasePath          string // default: "/api/auth"
 	Secret            string
 	Database          *DatabaseConfig
-	SecondaryStorage  SecondaryStorage
 	EmailVerification *EmailVerifConfig
 	EmailAndPassword  *EmailPassConfig
 	SocialProviders   map[string]social.ProviderConfig
@@ -38,13 +37,6 @@ type DatabaseConfig struct {
 	Adapter              adapter.Adapter
 	DefaultFindManyLimit int
 	GenerateID           GenerateIDFn
-}
-
-// SecondaryStorage is an optional key-value store for session caching.
-type SecondaryStorage interface {
-	Get(key string) ([]byte, error)
-	Set(key string, value []byte, ttl int) error
-	Delete(key string) error
 }
 
 // SessionConfig configures session behavior.

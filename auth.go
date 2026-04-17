@@ -119,7 +119,7 @@ func New(opts BetterAuthOptions) *Auth {
 
 	// Pass auth reference to AuthAware plugins before initialization.
 	for _, p := range opts.Plugins {
-		if aware, ok := p.(plugin.AuthAware); ok {
+		if aware, ok := p.(plugin.AuthAware[*Auth]); ok {
 			aware.SetAuth(a)
 		}
 	}

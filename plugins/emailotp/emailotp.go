@@ -53,12 +53,8 @@ func New(opts Options) *Plugin {
 
 func (p *Plugin) ID() string { return "emailotp" }
 
-func (p *Plugin) SetAuth(auth any) {
-	a, ok := auth.(*betterauth.Auth)
-	if !ok {
-		return
-	}
-	p.auth = a
+func (p *Plugin) SetAuth(auth *betterauth.Auth) {
+	p.auth = auth
 }
 
 // Endpoints registers /email-otp/send and /email-otp/verify.

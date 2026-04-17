@@ -47,12 +47,8 @@ func New(opts Options) *Plugin {
 
 func (p *Plugin) ID() string { return "username" }
 
-func (p *Plugin) SetAuth(auth any) {
-	a, ok := auth.(*betterauth.Auth)
-	if !ok {
-		return
-	}
-	p.auth = a
+func (p *Plugin) SetAuth(auth *betterauth.Auth) {
+	p.auth = auth
 }
 
 // Schema extends the user table with a username field.
