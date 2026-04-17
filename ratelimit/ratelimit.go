@@ -2,57 +2,73 @@
 package ratelimit
 
 import (
+	"net"
 	"net/http"
 	"sync"
 	"time"
 )
 
-// Limiter is a sliding-window rate limiter keyed by an arbitrary string.
-type Limiter struct {
+// Config holds the configuration for a RateLimiter.
+type Config struct {
+	Limit  int           // max requests per window
+	Window time.Duration // length of the sliding window
+}
+
+// RateLimiter is a sliding-window rate limiter keyed by an arbitrary string.
+type RateLimiter struct {
 	mu      sync.Mutex
 	entries map[string]*entry
 	window  time.Duration
-	max     int
+	limit   int
 }
 
 type entry struct {
-	count       int
-	windowStart time.Time
+	count   int
+	resetAt time.Time
 }
 
-// New creates a Limiter with the given window (seconds) and max request count.
-func New(windowSeconds, max int) *Limiter {
-	return &Limiter{
+// New creates a RateLimiter with the given Config.
+func New(cfg Config) *RateLimiter {
+	return &RateLimiter{
 		entries: make(map[string]*entry),
-		window:  time.Duration(windowSeconds) * time.Second,
-		max:     max,
+		window:  cfg.Window,
+		limit:   cfg.Limit,
 	}
 }
 
 // Allow returns true if the key is within the rate limit, false if exceeded.
-func (l *Limiter) Allow(key string) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+func (rl *RateLimiter) Allow(key string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
 
 	now := time.Now()
-	e, ok := l.entries[key]
-	if !ok || now.Sub(e.windowStart) > l.window {
-		l.entries[key] = &entry{count: 1, windowStart: now}
+
+	// Evict expired entries if map is getting large.
+	if len(rl.entries) > 10000 {
+		for k, e := range rl.entries {
+			if now.After(e.resetAt) {
+				delete(rl.entries, k)
+			}
+		}
+	}
+
+	e, ok := rl.entries[key]
+	if !ok || now.After(e.resetAt) {
+		rl.entries[key] = &entry{count: 1, resetAt: now.Add(rl.window)}
 		return true
 	}
-
-	if e.count >= l.max {
-		return false
-	}
 	e.count++
-	return true
+	return e.count <= rl.limit
 }
 
-// Middleware returns an HTTP middleware that rate-limits by remote IP.
-func (l *Limiter) Middleware(next http.Handler) http.Handler {
+// Middleware returns an HTTP middleware that rate-limits by remote IP (host only, no port).
+func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		key := r.RemoteAddr
-		if !l.Allow(key) {
+		host, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			host = r.RemoteAddr
+		}
+		if !rl.Allow(host) {
 			http.Error(w, `{"code":"RATE_LIMIT_EXCEEDED","message":"Too many requests"}`, http.StatusTooManyRequests)
 			return
 		}

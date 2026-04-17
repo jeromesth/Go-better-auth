@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/jeromesth/go-better-auth/oauth"
 	"github.com/jeromesth/go-better-auth/plugin"
@@ -22,7 +23,7 @@ type Auth struct {
 	internalAdapter    *InternalAdapter
 	sessionManager     *session.Manager
 	stateStore         *oauth.StateStore
-	rateLimiter        *ratelimit.Limiter
+	rateLimiter        *ratelimit.RateLimiter
 	socialProviders    map[string]social.SocialProvider
 	handler            http.Handler
 	sessionCreateHooks []plugin.SessionCreateHookFn
@@ -81,7 +82,10 @@ func New(opts BetterAuthOptions) *Auth {
 
 	// Set up rate limiter.
 	if opts.RateLimit != nil && opts.RateLimit.Enabled {
-		a.rateLimiter = ratelimit.New(opts.RateLimit.Window, opts.RateLimit.Max)
+		a.rateLimiter = ratelimit.New(ratelimit.Config{
+			Limit:  opts.RateLimit.Max,
+			Window: time.Duration(opts.RateLimit.Window) * time.Second,
+		})
 	}
 
 	// Register built-in social providers.
