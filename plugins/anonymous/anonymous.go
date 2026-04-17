@@ -6,7 +6,6 @@ package anonymous
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,6 +15,7 @@ import (
 	betterauth "github.com/jeromesth/go-better-auth"
 	"github.com/jeromesth/go-better-auth/crypto"
 	"github.com/jeromesth/go-better-auth/internal"
+	"github.com/jeromesth/go-better-auth/internal/httputil"
 	"github.com/jeromesth/go-better-auth/models"
 	"github.com/jeromesth/go-better-auth/plugin"
 	"github.com/jeromesth/go-better-auth/session"
@@ -158,7 +158,7 @@ func (p *Plugin) handleLink(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "INVALID_REQUEST", "Request body required")
 		return
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
 		return
 	}
@@ -288,13 +288,9 @@ func (p *Plugin) withMethod(method string, h http.HandlerFunc) http.HandlerFunc 
 }
 
 func writeErr(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": message})
+	httputil.WriteError(w, status, code, message)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	httputil.WriteJSON(w, status, v)
 }

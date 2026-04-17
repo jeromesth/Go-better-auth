@@ -7,12 +7,12 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
 
 	betterauth "github.com/jeromesth/go-better-auth"
+	"github.com/jeromesth/go-better-auth/internal/httputil"
 	"github.com/jeromesth/go-better-auth/plugin"
 	"github.com/jeromesth/go-better-auth/session"
 )
@@ -96,7 +96,7 @@ func (p *Plugin) handleCreate(w http.ResponseWriter, r *http.Request) {
 		Name string `json:"name"`
 	}
 	if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&req)
+		_ = httputil.DecodeJSON(r, &req)
 	}
 	if req.Name == "" {
 		req.Name = "API Key"
@@ -267,13 +267,9 @@ func sanitize(rec map[string]any) map[string]any {
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": message})
+	httputil.WriteError(w, status, code, message)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	httputil.WriteJSON(w, status, v)
 }

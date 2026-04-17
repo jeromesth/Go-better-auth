@@ -4,7 +4,6 @@
 package jwt
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	gojwt "github.com/golang-jwt/jwt/v5"
 
 	betterauth "github.com/jeromesth/go-better-auth"
+	"github.com/jeromesth/go-better-auth/internal/httputil"
 	"github.com/jeromesth/go-better-auth/plugin"
 )
 
@@ -88,9 +88,7 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(claims)
+	httputil.WriteJSON(w, http.StatusOK, claims)
 }
 
 // sign creates a signed JWT for the given userID.
@@ -128,7 +126,5 @@ func (p *Plugin) verify(raw string) (map[string]any, error) {
 }
 
 func writeJWTError(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": message})
+	httputil.WriteError(w, status, code, message)
 }

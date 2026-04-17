@@ -8,7 +8,6 @@ import (
 	"crypto/sha1"
 	"encoding/base32"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	betterauth "github.com/jeromesth/go-better-auth"
 	"github.com/jeromesth/go-better-auth/adapter"
 	"github.com/jeromesth/go-better-auth/internal"
+	"github.com/jeromesth/go-better-auth/internal/httputil"
 	"github.com/jeromesth/go-better-auth/plugin"
 	"github.com/jeromesth/go-better-auth/session"
 )
@@ -112,9 +112,7 @@ func (p *Plugin) checkTOTPOnSessionCreate(scc plugin.SessionCreateContext) error
 	}
 
 	// Write the TOTP_REQUIRED response and signal that we've handled it.
-	scc.Writer.Header().Set("Content-Type", "application/json")
-	scc.Writer.WriteHeader(http.StatusForbidden)
-	_ = json.NewEncoder(scc.Writer).Encode(map[string]any{
+	httputil.WriteJSON(scc.Writer, http.StatusForbidden, map[string]any{
 		"code":           "TOTP_REQUIRED",
 		"challengeToken": challengeToken,
 	})
@@ -432,24 +430,20 @@ func VerifyTOTP(secret, code string, t time.Time) bool {
 // --- JSON helpers ---
 
 func writeTOTPError(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": message})
+	httputil.WriteError(w, status, code, message)
 }
 
 func writeTOTPJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	httputil.WriteJSON(w, status, v)
 }
 
 func decodeTOTPJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	if r.Body == nil {
-		writeTOTPError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
 		return false
 	}
-	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		writeTOTPError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
+	if err := httputil.DecodeJSON(r, v); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
 		return false
 	}
 	return true

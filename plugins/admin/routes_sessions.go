@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jeromesth/go-better-auth/internal/httputil"
 	"github.com/jeromesth/go-better-auth/session"
 )
 
@@ -13,7 +14,8 @@ func (p *Plugin) handleListUserSessions(w http.ResponseWriter, r *http.Request) 
 	var req struct {
 		UserID string `json:"userId"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
 		return
 	}
 
@@ -28,14 +30,14 @@ func (p *Plugin) handleListUserSessions(w http.ResponseWriter, r *http.Request) 
 		Options:     p.opts,
 		Permissions: map[string][]string{"session": {"list"}},
 	}) {
-		writeAdminError(w, ErrNotAllowedToListSessions.Status, ErrNotAllowedToListSessions.Code, ErrNotAllowedToListSessions.Message)
+		httputil.WriteError(w, ErrNotAllowedToListSessions.Status, ErrNotAllowedToListSessions.Code, ErrNotAllowedToListSessions.Message)
 		return
 	}
 
 	ctx := r.Context()
 	recs, err := p.repo.FindSessionsByUserID(ctx, req.UserID)
 	if err != nil {
-		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list sessions")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list sessions")
 		return
 	}
 
@@ -44,7 +46,7 @@ func (p *Plugin) handleListUserSessions(w http.ResponseWriter, r *http.Request) 
 		sessions = append(sessions, recordToSessionWithImpersonation(rec))
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"sessions": sessions})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"sessions": sessions})
 }
 
 // --- POST /admin/revoke-user-session ---
@@ -53,7 +55,8 @@ func (p *Plugin) handleRevokeUserSession(w http.ResponseWriter, r *http.Request)
 	var req struct {
 		SessionToken string `json:"sessionToken"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
 		return
 	}
 
@@ -68,17 +71,17 @@ func (p *Plugin) handleRevokeUserSession(w http.ResponseWriter, r *http.Request)
 		Options:     p.opts,
 		Permissions: map[string][]string{"session": {"revoke"}},
 	}) {
-		writeAdminError(w, ErrNotAllowedToRevokeSessions.Status, ErrNotAllowedToRevokeSessions.Code, ErrNotAllowedToRevokeSessions.Message)
+		httputil.WriteError(w, ErrNotAllowedToRevokeSessions.Status, ErrNotAllowedToRevokeSessions.Code, ErrNotAllowedToRevokeSessions.Message)
 		return
 	}
 
 	ctx := r.Context()
 	if err := p.repo.RevokeSession(ctx, req.SessionToken); err != nil {
-		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to revoke session")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to revoke session")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
 // --- POST /admin/revoke-user-sessions ---
@@ -87,7 +90,8 @@ func (p *Plugin) handleRevokeUserSessions(w http.ResponseWriter, r *http.Request
 	var req struct {
 		UserID string `json:"userId"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
 		return
 	}
 
@@ -102,17 +106,17 @@ func (p *Plugin) handleRevokeUserSessions(w http.ResponseWriter, r *http.Request
 		Options:     p.opts,
 		Permissions: map[string][]string{"session": {"revoke"}},
 	}) {
-		writeAdminError(w, ErrNotAllowedToRevokeSessions.Status, ErrNotAllowedToRevokeSessions.Code, ErrNotAllowedToRevokeSessions.Message)
+		httputil.WriteError(w, ErrNotAllowedToRevokeSessions.Status, ErrNotAllowedToRevokeSessions.Code, ErrNotAllowedToRevokeSessions.Message)
 		return
 	}
 
 	ctx := r.Context()
 	if err := p.repo.RevokeAllUserSessions(ctx, req.UserID); err != nil {
-		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to revoke sessions")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to revoke sessions")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
 // --- POST /admin/impersonate-user ---
@@ -121,7 +125,8 @@ func (p *Plugin) handleImpersonateUser(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		UserID string `json:"userId"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
 		return
 	}
 
@@ -136,14 +141,14 @@ func (p *Plugin) handleImpersonateUser(w http.ResponseWriter, r *http.Request) {
 		Options:     p.opts,
 		Permissions: map[string][]string{"user": {"impersonate"}},
 	}) {
-		writeAdminError(w, ErrNotAllowedToImpersonate.Status, ErrNotAllowedToImpersonate.Code, ErrNotAllowedToImpersonate.Message)
+		httputil.WriteError(w, ErrNotAllowedToImpersonate.Status, ErrNotAllowedToImpersonate.Code, ErrNotAllowedToImpersonate.Message)
 		return
 	}
 
 	ctx := r.Context()
 	targetRec, err := p.repo.FindUserByID(ctx, req.UserID)
 	if err != nil || targetRec == nil {
-		writeAdminError(w, http.StatusNotFound, "USER_NOT_FOUND", "User not found")
+		httputil.WriteError(w, http.StatusNotFound, "USER_NOT_FOUND", "User not found")
 		return
 	}
 
@@ -158,7 +163,7 @@ func (p *Plugin) handleImpersonateUser(w http.ResponseWriter, r *http.Request) {
 			Permissions: map[string][]string{"user": {"impersonate-admins"}},
 		})
 		if !canImpersonateAdmins {
-			writeAdminError(w, ErrCannotImpersonateAdmins.Status, ErrCannotImpersonateAdmins.Code, ErrCannotImpersonateAdmins.Message)
+			httputil.WriteError(w, ErrCannotImpersonateAdmins.Status, ErrCannotImpersonateAdmins.Code, ErrCannotImpersonateAdmins.Message)
 			return
 		}
 	}
@@ -172,7 +177,7 @@ func (p *Plugin) handleImpersonateUser(w http.ResponseWriter, r *http.Request) {
 
 	sess, err := p.repo.CreateImpersonationSession(ctx, targetUser.ID, adminUser.ID, expiresAt)
 	if err != nil {
-		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create impersonation session")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create impersonation session")
 		return
 	}
 
@@ -189,7 +194,7 @@ func (p *Plugin) handleImpersonateUser(w http.ResponseWriter, r *http.Request) {
 	// Set the new session cookie for the impersonated user.
 	session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, p.auth.Options().Advanced != nil && p.auth.Options().Advanced.UseSecureCookies)
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"session": sess,
 		"user":    targetUser,
 	})
@@ -200,47 +205,47 @@ func (p *Plugin) handleImpersonateUser(w http.ResponseWriter, r *http.Request) {
 func (p *Plugin) handleStopImpersonating(w http.ResponseWriter, r *http.Request) {
 	token := session.GetSessionToken(r)
 	if token == "" {
-		writeAdminError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
 		return
 	}
 
 	ctx := r.Context()
 	sess, err := p.repo.FindSessionByToken(ctx, token)
 	if err != nil || sess == nil || session.IsExpired(sess) {
-		writeAdminError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
 		return
 	}
 
 	// Find the impersonated_by field from raw session record.
 	rawSess, err := p.repo.FindRawSession(ctx, token)
 	if err != nil || rawSess == nil {
-		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to find session")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to find session")
 		return
 	}
 
 	impersonatedBy, _ := rawSess["impersonated_by"].(string)
 	if impersonatedBy == "" {
-		writeAdminError(w, http.StatusBadRequest, "BAD_REQUEST", "You are not impersonating anyone")
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "You are not impersonating anyone")
 		return
 	}
 
 	// Find the admin user.
 	adminRec, err := p.repo.FindUserByID(ctx, impersonatedBy)
 	if err != nil || adminRec == nil {
-		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to find admin user")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to find admin user")
 		return
 	}
 
 	// Get the admin session from cookie.
 	adminCookie, err := r.Cookie("better-auth.admin_session")
 	if err != nil || adminCookie.Value == "" {
-		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to find admin session")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to find admin session")
 		return
 	}
 
 	adminSession, err := p.repo.FindSessionByToken(ctx, adminCookie.Value)
 	if err != nil || adminSession == nil {
-		writeAdminError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to find admin session")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to find admin session")
 		return
 	}
 
@@ -259,7 +264,7 @@ func (p *Plugin) handleStopImpersonating(w http.ResponseWriter, r *http.Request)
 		HttpOnly: true,
 	})
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"session": adminSession,
 		"user":    recordToUserWithRole(adminRec),
 	})
@@ -273,12 +278,13 @@ func (p *Plugin) handleHasPermission(w http.ResponseWriter, r *http.Request) {
 		Role        string              `json:"role,omitempty"`
 		Permissions map[string][]string `json:"permissions"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
 		return
 	}
 
 	if req.Permissions == nil {
-		writeAdminError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid permission check. no permission(s) were passed.")
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid permission check. no permission(s) were passed.")
 		return
 	}
 
@@ -298,7 +304,7 @@ func (p *Plugin) handleHasPermission(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if sessionUser == nil && req.UserID == "" && req.Role == "" {
-		writeAdminError(w, http.StatusBadRequest, "BAD_REQUEST", "user id or role is required")
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "user id or role is required")
 		return
 	}
 
@@ -317,7 +323,7 @@ func (p *Plugin) handleHasPermission(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		rec, err := p.repo.FindUserByID(ctx, req.UserID)
 		if err != nil || rec == nil {
-			writeAdminError(w, http.StatusBadRequest, "BAD_REQUEST", "user not found")
+			httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "user not found")
 			return
 		}
 		u := recordToUserWithRole(rec)
@@ -332,7 +338,7 @@ func (p *Plugin) handleHasPermission(w http.ResponseWriter, r *http.Request) {
 		Permissions: req.Permissions,
 	})
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"error":   nil,
 		"success": result,
 	})
