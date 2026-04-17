@@ -43,7 +43,7 @@ func (a *Auth) handleSendVerificationEmail(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if user == nil {
-		ErrUserNotFound.WriteJSON(w)
+		httputil.WriteJSON(w, http.StatusOK, map[string]bool{"success": true})
 		return
 	}
 	if user.EmailVerified {

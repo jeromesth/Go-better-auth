@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	betterauth "github.com/jeromesth/go-better-auth"
+	"github.com/jeromesth/go-better-auth/adapter"
 	"github.com/jeromesth/go-better-auth/adapter/memory"
 )
 
@@ -164,6 +165,17 @@ func TestPasswordTooShort(t *testing.T) {
 	}
 }
 
+// signUp creates a new user account and returns the response recorder.
+func signUp(t *testing.T, auth *betterauth.Auth, email, password string) *httptest.ResponseRecorder {
+	t.Helper()
+	h := auth.Handler()
+	return postJSON(t, h, "/api/auth/sign-up/email", map[string]string{
+		"email":    email,
+		"password": password,
+		"name":     "Test User",
+	}, nil)
+}
+
 func TestUpdateUser(t *testing.T) {
 	auth := newTestAuth()
 	h := auth.Handler()
@@ -188,5 +200,57 @@ func TestUpdateUser(t *testing.T) {
 	user, _ := resp["user"].(map[string]any)
 	if user["name"] != "New Name" {
 		t.Fatalf("expected name to be updated, got: %v", user["name"])
+	}
+}
+
+func TestRequestPasswordReset_UnknownEmail_Returns200(t *testing.T) {
+	// Auth libraries must not leak whether an email is registered.
+	a := newTestAuth()
+	h := a.Handler()
+	w := postJSON(t, h, "/api/auth/request-password-reset",
+		map[string]any{"email": "nobody@example.com"}, nil)
+	if w.Code != http.StatusOK {
+		t.Errorf("got %d, want 200 — must not enumerate emails", w.Code)
+	}
+}
+
+func TestRequestPasswordReset_KnownEmail_Returns200(t *testing.T) {
+	a := newTestAuth()
+	signUp(t, a, "user@example.com", "password123")
+	h := a.Handler()
+	w := postJSON(t, h, "/api/auth/request-password-reset",
+		map[string]any{"email": "user@example.com"}, nil)
+	if w.Code != http.StatusOK {
+		t.Errorf("got %d, want 200", w.Code)
+	}
+}
+
+func TestResetPassword_InvalidToken_Returns400(t *testing.T) {
+	a := newTestAuth()
+	h := a.Handler()
+	w := postJSON(t, h, "/api/auth/reset-password",
+		map[string]any{"token": "bogus-token", "newPassword": "newpass123"}, nil)
+	if w.Code != http.StatusBadRequest && w.Code != http.StatusUnauthorized {
+		t.Errorf("got %d, want 400 or 401 for invalid token", w.Code)
+	}
+}
+
+func TestResetPassword_PasswordTooShort_Returns400(t *testing.T) {
+	a := newTestAuth()
+	signUp(t, a, "user@example.com", "password123")
+	h := a.Handler()
+	// Trigger a reset to generate a token.
+	postJSON(t, h, "/api/auth/request-password-reset",
+		map[string]any{"email": "user@example.com"}, nil)
+	// Retrieve token from adapter (stored in "value" field of verification record).
+	tokens, _ := a.InternalAdapter().Adapter().FindMany(t.Context(), "verification", adapter.Query{})
+	if len(tokens) == 0 {
+		t.Skip("no token generated — email provider not configured in test")
+	}
+	token, _ := tokens[0]["value"].(string)
+	w := postJSON(t, h, "/api/auth/reset-password",
+		map[string]any{"token": token, "newPassword": "x"}, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("got %d, want 400 for short password", w.Code)
 	}
 }
