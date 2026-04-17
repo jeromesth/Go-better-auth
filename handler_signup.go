@@ -94,14 +94,14 @@ func (a *Auth) handleSignUpEmail(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		ip := internal.GetClientIP(r, a.ipHeader())
+		ip := internal.GetClientIP(r, a.IPHeader())
 		ua := r.UserAgent()
 		sess, err := a.sessionManager.Create(ctx, user.ID, ip, ua)
 		if err != nil {
 			ErrInternal.WriteJSON(w)
 			return
 		}
-		session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, a.isSecure())
+		session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, a.IsSecure())
 		httputil.WriteJSON(w, http.StatusOK, map[string]any{
 			"user":    user,
 			"session": sess,

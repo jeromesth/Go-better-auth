@@ -100,7 +100,7 @@ func (a *Adapter) FindMany(ctx context.Context, model string, q adapter.Query) (
 	if q.Offset > 0 && q.Offset < len(results) {
 		results = results[q.Offset:]
 	} else if q.Offset >= len(results) {
-		return nil, nil
+		return []map[string]any{}, nil
 	}
 
 	if q.Limit > 0 && q.Limit < len(results) {

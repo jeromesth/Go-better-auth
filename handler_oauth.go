@@ -142,7 +142,7 @@ func (a *Auth) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ip := internal.GetClientIP(r, a.ipHeader())
+	ip := internal.GetClientIP(r, a.IPHeader())
 	ua := r.UserAgent()
 	sess, err := a.sessionManager.Create(ctx, userID, ip, ua)
 	if err != nil {
@@ -150,7 +150,7 @@ func (a *Auth) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, a.isSecure())
+	session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, a.IsSecure())
 
 	redirectURL := stateEntry.CallbackURL
 	if redirectURL == "" {

@@ -225,26 +225,21 @@ func (a *Auth) buildRouter() http.Handler {
 	return mux
 }
 
-// isSecure returns true if cookies should be set with Secure flag.
-func (a *Auth) isSecure() bool {
+// IsSecure returns true if cookies should be set with Secure flag.
+func (a *Auth) IsSecure() bool {
 	if a.opts.Advanced != nil {
 		return a.opts.Advanced.UseSecureCookies
 	}
 	return strings.HasPrefix(a.opts.BaseURL, "https://")
 }
 
-// IsSecure is the exported version of isSecure, for use by plugins.
-func (a *Auth) IsSecure() bool { return a.isSecure() }
-
-func (a *Auth) ipHeader() string {
+// IPHeader returns the HTTP header used to extract the client IP address.
+func (a *Auth) IPHeader() string {
 	if a.opts.Advanced != nil {
 		return a.opts.Advanced.IPHeader
 	}
 	return ""
 }
-
-// IPHeader is the exported version of ipHeader, for use by plugins.
-func (a *Auth) IPHeader() string { return a.ipHeader() }
 
 // Handler returns the http.Handler that serves all auth endpoints.
 // Mount this at your chosen base path:
