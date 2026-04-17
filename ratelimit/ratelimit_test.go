@@ -1,6 +1,7 @@
 package ratelimit_test
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -126,4 +127,24 @@ func TestMiddleware_UsesHostNotPort(t *testing.T) {
 	if w2.Code != http.StatusTooManyRequests {
 		t.Errorf("second request from same IP different port: got %d, want 429", w2.Code)
 	}
+}
+
+func BenchmarkAllow_SingleKey(b *testing.B) {
+	rl := ratelimit.New(ratelimit.Config{Limit: 1000000, Window: time.Minute})
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			rl.Allow("benchmark-key")
+		}
+	})
+}
+
+func BenchmarkAllow_HighCardinality(b *testing.B) {
+	rl := ratelimit.New(ratelimit.Config{Limit: 1000000, Window: time.Minute})
+	b.RunParallel(func(pb *testing.PB) {
+		i := 0
+		for pb.Next() {
+			rl.Allow(fmt.Sprintf("key-%d", i%10000))
+			i++
+		}
+	})
 }
