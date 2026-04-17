@@ -6,7 +6,6 @@ package anonymous
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,6 +15,7 @@ import (
 	betterauth "github.com/jeromesth/go-better-auth"
 	"github.com/jeromesth/go-better-auth/crypto"
 	"github.com/jeromesth/go-better-auth/internal"
+	"github.com/jeromesth/go-better-auth/internal/httputil"
 	"github.com/jeromesth/go-better-auth/models"
 	"github.com/jeromesth/go-better-auth/plugin"
 	"github.com/jeromesth/go-better-auth/session"
@@ -49,7 +49,11 @@ func New(opts Options) *Plugin {
 func (p *Plugin) ID() string { return "anonymous" }
 
 func (p *Plugin) SetAuth(auth any) {
-	p.auth = auth.(*betterauth.Auth)
+	a, ok := auth.(*betterauth.Auth)
+	if !ok {
+		return
+	}
+	p.auth = a
 }
 
 // Schema extends the user table with an is_anonymous field.
@@ -85,14 +89,14 @@ func (p *Plugin) handleSignInAnonymous(w http.ResponseWriter, r *http.Request) {
 		return p.auth.RunUserCreateHooks(data)
 	})
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
 		return
 	}
 
 	// Run session-create hooks.
 	if err := p.auth.RunSessionCreateHooks(w, r, user.ID); err != nil {
 		if !errors.Is(err, plugin.ErrHandled) {
-			writeErr(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+			httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
 		}
 		return
 	}
@@ -101,12 +105,12 @@ func (p *Plugin) handleSignInAnonymous(w http.ResponseWriter, r *http.Request) {
 	ua := r.UserAgent()
 	sess, err := p.auth.SessionManager().Create(ctx, user.ID, ip, ua)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
 		return
 	}
 
 	session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, p.auth.IsSecure())
-	writeJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"user":    modelUserResponse(user, true),
 		"session": sess,
 	})
@@ -125,47 +129,47 @@ func (p *Plugin) handleLink(w http.ResponseWriter, r *http.Request) {
 	// Require an active session.
 	token := session.GetSessionToken(r)
 	if token == "" {
-		writeErr(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
 		return
 	}
 
 	sess, err := p.auth.SessionManager().FindByToken(ctx, token)
 	if err != nil || sess == nil || session.IsExpired(sess) {
-		writeErr(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid or expired session")
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid or expired session")
 		return
 	}
 
 	// Get the current user and check if they are anonymous.
 	userRec, err := ia.FindUserByIDRaw(ctx, sess.UserID)
 	if err != nil || userRec == nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
 		return
 	}
 
 	isAnon, _ := userRec["is_anonymous"].(bool)
 	if !isAnon {
-		writeErr(w, http.StatusBadRequest, "NOT_ANONYMOUS", "User is not anonymous")
+		httputil.WriteError(w, http.StatusBadRequest, "NOT_ANONYMOUS", "User is not anonymous")
 		return
 	}
 
 	// Parse request body.
 	var req linkRequest
 	if r.Body == nil {
-		writeErr(w, http.StatusBadRequest, "INVALID_REQUEST", "Request body required")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_REQUEST", "Request body required")
 		return
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
 		return
 	}
 
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 	if req.Email == "" {
-		writeErr(w, http.StatusBadRequest, "MISSING_EMAIL", "email is required")
+		httputil.WriteError(w, http.StatusBadRequest, "MISSING_EMAIL", "email is required")
 		return
 	}
 	if req.Password == "" {
-		writeErr(w, http.StatusBadRequest, "MISSING_PASSWORD", "password is required")
+		httputil.WriteError(w, http.StatusBadRequest, "MISSING_PASSWORD", "password is required")
 		return
 	}
 
@@ -173,11 +177,11 @@ func (p *Plugin) handleLink(w http.ResponseWriter, r *http.Request) {
 	epCfg := p.auth.Options().EmailAndPassword
 	if epCfg != nil {
 		if epCfg.MinPasswordLength > 0 && len(req.Password) < epCfg.MinPasswordLength {
-			writeErr(w, http.StatusBadRequest, "PASSWORD_TOO_SHORT", fmt.Sprintf("password must be at least %d characters", epCfg.MinPasswordLength))
+			httputil.WriteError(w, http.StatusBadRequest, "PASSWORD_TOO_SHORT", fmt.Sprintf("password must be at least %d characters", epCfg.MinPasswordLength))
 			return
 		}
 		if epCfg.MaxPasswordLength > 0 && len(req.Password) > epCfg.MaxPasswordLength {
-			writeErr(w, http.StatusBadRequest, "PASSWORD_TOO_LONG", fmt.Sprintf("password must be at most %d characters", epCfg.MaxPasswordLength))
+			httputil.WriteError(w, http.StatusBadRequest, "PASSWORD_TOO_LONG", fmt.Sprintf("password must be at most %d characters", epCfg.MaxPasswordLength))
 			return
 		}
 	}
@@ -185,18 +189,18 @@ func (p *Plugin) handleLink(w http.ResponseWriter, r *http.Request) {
 	// Check that the email isn't already in use.
 	existing, err := ia.FindUserByEmail(ctx, req.Email)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
 		return
 	}
 	if existing != nil {
-		writeErr(w, http.StatusConflict, "EMAIL_ALREADY_USED", "Email is already in use")
+		httputil.WriteError(w, http.StatusConflict, "EMAIL_ALREADY_USED", "Email is already in use")
 		return
 	}
 
 	// Hash the password.
 	hash, err := crypto.HashPassword(req.Password)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
 		return
 	}
 
@@ -211,7 +215,7 @@ func (p *Plugin) handleLink(w http.ResponseWriter, r *http.Request) {
 
 	updatedRec, err := ia.UpdateUserRaw(ctx, sess.UserID, updateData)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
 		return
 	}
 
@@ -219,11 +223,11 @@ func (p *Plugin) handleLink(w http.ResponseWriter, r *http.Request) {
 	if _, err = ia.CreateAccount(ctx, sess.UserID, sess.UserID, "credential", map[string]any{
 		"password": hash,
 	}); err != nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"user": rawUserResponse(updatedRec),
 	})
 }
@@ -281,16 +285,4 @@ func (p *Plugin) withMethod(method string, h http.HandlerFunc) http.HandlerFunc 
 		}
 		h(w, r)
 	}
-}
-
-func writeErr(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": message})
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
 }

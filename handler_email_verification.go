@@ -8,6 +8,7 @@ import (
 
 	"github.com/jeromesth/go-better-auth/crypto"
 	"github.com/jeromesth/go-better-auth/internal"
+	"github.com/jeromesth/go-better-auth/internal/httputil"
 	"github.com/jeromesth/go-better-auth/plugin"
 	"github.com/jeromesth/go-better-auth/session"
 )
@@ -17,7 +18,8 @@ func (a *Auth) handleSendVerificationEmail(w http.ResponseWriter, r *http.Reques
 		Email       string `json:"email"`
 		CallbackURL string `json:"callbackURL"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
@@ -41,11 +43,15 @@ func (a *Auth) handleSendVerificationEmail(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if user == nil {
-		ErrUserNotFound.WriteJSON(w)
+		// Return early with the same response as a known email to prevent status-code enumeration.
+		// Note: timing still differs slightly (unknown returns immediately, known triggers token
+		// generation and storage). For high-security deployments, equalise timing with a constant-
+		// time response or deferred goroutine.
+		httputil.WriteJSON(w, http.StatusOK, map[string]bool{"success": true})
 		return
 	}
 	if user.EmailVerified {
-		writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+		httputil.WriteJSON(w, http.StatusOK, map[string]bool{"success": true})
 		return
 	}
 
@@ -70,7 +76,7 @@ func (a *Auth) handleSendVerificationEmail(w http.ResponseWriter, r *http.Reques
 		}, r)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+	httputil.WriteJSON(w, http.StatusOK, map[string]bool{"success": true})
 }
 
 func (a *Auth) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
@@ -117,17 +123,17 @@ func (a *Auth) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 	if evCfg != nil && evCfg.AutoSignInAfterVerification {
 		if err := a.RunSessionCreateHooks(w, r, user.ID); err != nil {
 			if !errors.Is(err, plugin.ErrHandled) {
-				writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+				httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
 			}
 			return
 		}
-		ip := internal.GetClientIP(r, a.ipHeader())
+		ip := internal.GetClientIP(r, a.IPHeader())
 		ua := r.UserAgent()
 		sess, err := a.sessionManager.Create(ctx, user.ID, ip, ua)
 		if err == nil {
-			session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, a.isSecure())
+			session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, a.IsSecure())
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+	httputil.WriteJSON(w, http.StatusOK, map[string]bool{"success": true})
 }

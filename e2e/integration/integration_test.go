@@ -1,5 +1,5 @@
-// Package integration contains full integration tests that exercise multiple
-// subsystems together (sign-up -> verify email -> sign-in -> change password -> etc.).
+// Package integration provides HTTP-level integration tests using net/http/httptest.
+// Tests run in-process against a real Auth instance with an in-memory adapter.
 package integration_test
 
 import (

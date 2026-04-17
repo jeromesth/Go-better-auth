@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jeromesth/go-better-auth/adapter"
+	"github.com/jeromesth/go-better-auth/internal/httputil"
 	"github.com/jeromesth/go-better-auth/session"
 )
 
@@ -17,7 +18,8 @@ func (p *Plugin) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
 		Email          string `json:"email,omitempty"`
 		OrganizationID string `json:"organizationId,omitempty"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -34,20 +36,20 @@ func (p *Plugin) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
 		orgID = getActiveOrgID(sessRaw)
 	}
 	if orgID == "" {
-		writeError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
+		httputil.WriteError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
 		return
 	}
 
 	// Check caller's membership and permissions.
 	callerMember, err := p.findMemberByUserAndOrg(ctx, userID, orgID)
 	if err != nil || callerMember == nil {
-		writeError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
+		httputil.WriteError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
 		return
 	}
 
 	callerRole, _ := callerMember["role"].(string)
 	if !HasPermission(callerRole, map[string][]string{"member": {"delete"}}, p.opts.Roles) {
-		writeError(w, ErrNotAllowedToRemove.Status, ErrNotAllowedToRemove.Code, ErrNotAllowedToRemove.Message)
+		httputil.WriteError(w, ErrNotAllowedToRemove.Status, ErrNotAllowedToRemove.Code, ErrNotAllowedToRemove.Message)
 		return
 	}
 
@@ -70,7 +72,7 @@ func (p *Plugin) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if targetMember == nil {
-		writeError(w, ErrMemberNotFound.Status, ErrMemberNotFound.Code, ErrMemberNotFound.Message)
+		httputil.WriteError(w, ErrMemberNotFound.Status, ErrMemberNotFound.Code, ErrMemberNotFound.Message)
 		return
 	}
 
@@ -78,13 +80,13 @@ func (p *Plugin) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
 
 	// Check if this is the last owner.
 	if p.isLastOwner(ctx, orgID, targetRole) {
-		writeError(w, ErrCannotRemoveLastOwner.Status, ErrCannotRemoveLastOwner.Code, ErrCannotRemoveLastOwner.Message)
+		httputil.WriteError(w, ErrCannotRemoveLastOwner.Status, ErrCannotRemoveLastOwner.Code, ErrCannotRemoveLastOwner.Message)
 		return
 	}
 
 	// Non-owners cannot remove owners.
 	if !CanManageRole(callerRole, targetRole) {
-		writeError(w, ErrNotAllowedToRemove.Status, ErrNotAllowedToRemove.Code, ErrNotAllowedToRemove.Message)
+		httputil.WriteError(w, ErrNotAllowedToRemove.Status, ErrNotAllowedToRemove.Code, ErrNotAllowedToRemove.Message)
 		return
 	}
 
@@ -96,7 +98,7 @@ func (p *Plugin) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 
-	writeJSON(w, http.StatusOK, recordToMember(targetMember))
+	httputil.WriteJSON(w, http.StatusOK, recordToMember(targetMember))
 }
 
 // --- POST /organization/update-member-role ---
@@ -107,7 +109,8 @@ func (p *Plugin) handleUpdateMemberRole(w http.ResponseWriter, r *http.Request) 
 		Role           any    `json:"role"`
 		OrganizationID string `json:"organizationId,omitempty"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -124,20 +127,20 @@ func (p *Plugin) handleUpdateMemberRole(w http.ResponseWriter, r *http.Request) 
 		orgID = getActiveOrgID(sessRaw)
 	}
 	if orgID == "" {
-		writeError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
+		httputil.WriteError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
 		return
 	}
 
 	// Check caller's membership and permissions.
 	callerMember, err := p.findMemberByUserAndOrg(ctx, userID, orgID)
 	if err != nil || callerMember == nil {
-		writeError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
+		httputil.WriteError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
 		return
 	}
 
 	callerRole, _ := callerMember["role"].(string)
 	if !HasPermission(callerRole, map[string][]string{"member": {"update"}}, p.opts.Roles) {
-		writeError(w, ErrNotAllowedToUpdateRole.Status, ErrNotAllowedToUpdateRole.Code, ErrNotAllowedToUpdateRole.Message)
+		httputil.WriteError(w, ErrNotAllowedToUpdateRole.Status, ErrNotAllowedToUpdateRole.Code, ErrNotAllowedToUpdateRole.Message)
 		return
 	}
 
@@ -149,13 +152,13 @@ func (p *Plugin) handleUpdateMemberRole(w http.ResponseWriter, r *http.Request) 
 		},
 	})
 	if err != nil || targetMember == nil {
-		writeError(w, ErrMemberNotFound.Status, ErrMemberNotFound.Code, ErrMemberNotFound.Message)
+		httputil.WriteError(w, ErrMemberNotFound.Status, ErrMemberNotFound.Code, ErrMemberNotFound.Message)
 		return
 	}
 
 	newRole := parseRoles(req.Role)
 	if !p.rolesExist(newRole) {
-		writeError(w, ErrInvalidRoleType.Status, ErrInvalidRoleType.Code, ErrInvalidRoleType.Message)
+		httputil.WriteError(w, ErrInvalidRoleType.Status, ErrInvalidRoleType.Code, ErrInvalidRoleType.Message)
 		return
 	}
 
@@ -168,7 +171,7 @@ func (p *Plugin) handleUpdateMemberRole(w http.ResponseWriter, r *http.Request) 
 
 	// Non-owners cannot update owners (unless updating themselves).
 	if callerMemberID != targetMemberID && !CanManageRole(callerRole, targetRole) {
-		writeError(w, ErrNotAllowedToUpdateRole.Status, ErrNotAllowedToUpdateRole.Code, ErrNotAllowedToUpdateRole.Message)
+		httputil.WriteError(w, ErrNotAllowedToUpdateRole.Status, ErrNotAllowedToUpdateRole.Code, ErrNotAllowedToUpdateRole.Message)
 		return
 	}
 
@@ -176,15 +179,15 @@ func (p *Plugin) handleUpdateMemberRole(w http.ResponseWriter, r *http.Request) 
 	// - Only the current owner can transfer ownership.
 	// - Owner role cannot be dropped from the current owner without transfer.
 	if newHasOwner && !callerIsOwner {
-		writeError(w, ErrNotAllowedToUpdateRole.Status, ErrNotAllowedToUpdateRole.Code, ErrNotAllowedToUpdateRole.Message)
+		httputil.WriteError(w, ErrNotAllowedToUpdateRole.Status, ErrNotAllowedToUpdateRole.Code, ErrNotAllowedToUpdateRole.Message)
 		return
 	}
 	if targetIsOwner && !newHasOwner {
-		writeError(w, ErrCannotRemoveLastOwner.Status, ErrCannotRemoveLastOwner.Code, ErrCannotRemoveLastOwner.Message)
+		httputil.WriteError(w, ErrCannotRemoveLastOwner.Status, ErrCannotRemoveLastOwner.Code, ErrCannotRemoveLastOwner.Message)
 		return
 	}
 	if callerMemberID == targetMemberID && callerIsOwner && !newHasOwner {
-		writeError(w, ErrCannotRemoveLastOwner.Status, ErrCannotRemoveLastOwner.Code, ErrCannotRemoveLastOwner.Message)
+		httputil.WriteError(w, ErrCannotRemoveLastOwner.Status, ErrCannotRemoveLastOwner.Code, ErrCannotRemoveLastOwner.Message)
 		return
 	}
 
@@ -195,7 +198,7 @@ func (p *Plugin) handleUpdateMemberRole(w http.ResponseWriter, r *http.Request) 
 		},
 	}, map[string]any{"role": newRole})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update member role")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update member role")
 		return
 	}
 
@@ -212,12 +215,12 @@ func (p *Plugin) handleUpdateMemberRole(w http.ResponseWriter, r *http.Request) 
 			},
 		}, map[string]any{"role": demotedRole})
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to transfer ownership")
+			httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to transfer ownership")
 			return
 		}
 	}
 
-	writeJSON(w, http.StatusOK, recordToMember(rec))
+	httputil.WriteJSON(w, http.StatusOK, recordToMember(rec))
 }
 
 // --- GET /organization/get-active-member ---
@@ -230,18 +233,18 @@ func (p *Plugin) handleGetActiveMember(w http.ResponseWriter, r *http.Request) {
 
 	orgID := getActiveOrgID(sessRaw)
 	if orgID == "" {
-		writeError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, "No active organization")
+		httputil.WriteError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, "No active organization")
 		return
 	}
 
 	ctx := r.Context()
 	memberRec, err := p.findMemberByUserAndOrg(ctx, userID, orgID)
 	if err != nil || memberRec == nil {
-		writeError(w, ErrMemberNotFound.Status, ErrMemberNotFound.Code, ErrMemberNotFound.Message)
+		httputil.WriteError(w, ErrMemberNotFound.Status, ErrMemberNotFound.Code, ErrMemberNotFound.Message)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, recordToMember(memberRec))
+	httputil.WriteJSON(w, http.StatusOK, recordToMember(memberRec))
 }
 
 // --- POST /organization/leave ---
@@ -250,7 +253,8 @@ func (p *Plugin) handleLeaveOrganization(w http.ResponseWriter, r *http.Request)
 	var req struct {
 		OrganizationID string `json:"organizationId,omitempty"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -267,13 +271,13 @@ func (p *Plugin) handleLeaveOrganization(w http.ResponseWriter, r *http.Request)
 		orgID = getActiveOrgID(sessRaw)
 	}
 	if orgID == "" {
-		writeError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
+		httputil.WriteError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
 		return
 	}
 
 	memberRec, err := p.findMemberByUserAndOrg(ctx, userID, orgID)
 	if err != nil || memberRec == nil {
-		writeError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
+		httputil.WriteError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
 		return
 	}
 
@@ -281,7 +285,7 @@ func (p *Plugin) handleLeaveOrganization(w http.ResponseWriter, r *http.Request)
 
 	// Check if this is the last owner.
 	if p.isLastOwner(ctx, orgID, memberRole) {
-		writeError(w, ErrCannotRemoveLastOwner.Status, ErrCannotRemoveLastOwner.Code, ErrCannotRemoveLastOwner.Message)
+		httputil.WriteError(w, ErrCannotRemoveLastOwner.Status, ErrCannotRemoveLastOwner.Code, ErrCannotRemoveLastOwner.Message)
 		return
 	}
 
@@ -294,7 +298,7 @@ func (p *Plugin) handleLeaveOrganization(w http.ResponseWriter, r *http.Request)
 	token := session.GetSessionToken(r)
 	_ = p.setActiveOrgOnSession(ctx, token, "")
 
-	writeJSON(w, http.StatusOK, recordToMember(memberRec))
+	httputil.WriteJSON(w, http.StatusOK, recordToMember(memberRec))
 }
 
 // --- POST /organization/has-permission ---
@@ -304,7 +308,8 @@ func (p *Plugin) handleHasPermission(w http.ResponseWriter, r *http.Request) {
 		OrganizationID string              `json:"organizationId,omitempty"`
 		Permissions    map[string][]string `json:"permissions"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -314,7 +319,7 @@ func (p *Plugin) handleHasPermission(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Permissions == nil {
-		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "permissions are required")
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "permissions are required")
 		return
 	}
 
@@ -325,20 +330,20 @@ func (p *Plugin) handleHasPermission(w http.ResponseWriter, r *http.Request) {
 		orgID = getActiveOrgID(sessRaw)
 	}
 	if orgID == "" {
-		writeError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
+		httputil.WriteError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
 		return
 	}
 
 	memberRec, err := p.findMemberByUserAndOrg(ctx, userID, orgID)
 	if err != nil || memberRec == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"error": nil, "success": false})
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{"error": nil, "success": false})
 		return
 	}
 
 	memberRole, _ := memberRec["role"].(string)
 	result := HasPermission(memberRole, req.Permissions, p.opts.Roles)
 
-	writeJSON(w, http.StatusOK, map[string]any{"error": nil, "success": result})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"error": nil, "success": result})
 }
 
 // --- GET /organization/list-members ---
@@ -357,14 +362,14 @@ func (p *Plugin) handleListMembers(w http.ResponseWriter, r *http.Request) {
 		orgID = getActiveOrgID(sessRaw)
 	}
 	if orgID == "" {
-		writeError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
+		httputil.WriteError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
 		return
 	}
 
 	// Check membership.
 	memberRec, err := p.findMemberByUserAndOrg(ctx, userID, orgID)
 	if err != nil || memberRec == nil {
-		writeError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
+		httputil.WriteError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
 		return
 	}
 
@@ -380,7 +385,7 @@ func (p *Plugin) handleListMembers(w http.ResponseWriter, r *http.Request) {
 		members = []*Member{}
 	}
 
-	writeJSON(w, http.StatusOK, members)
+	httputil.WriteJSON(w, http.StatusOK, members)
 }
 
 // --- POST /organization/add-member ---
@@ -391,7 +396,8 @@ func (p *Plugin) handleAddMember(w http.ResponseWriter, r *http.Request) {
 		UserID         string `json:"userId"`
 		Role           any    `json:"role"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -408,27 +414,27 @@ func (p *Plugin) handleAddMember(w http.ResponseWriter, r *http.Request) {
 		orgID = getActiveOrgID(sessRaw)
 	}
 	if orgID == "" {
-		writeError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
+		httputil.WriteError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
 		return
 	}
 
 	// Check caller's membership and permissions.
 	callerMember, err := p.findMemberByUserAndOrg(ctx, callerID, orgID)
 	if err != nil || callerMember == nil {
-		writeError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
+		httputil.WriteError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
 		return
 	}
 
 	callerRole, _ := callerMember["role"].(string)
 	if !HasPermission(callerRole, map[string][]string{"member": {"create"}}, p.opts.Roles) {
-		writeError(w, ErrNotAllowedToInvite.Status, ErrNotAllowedToInvite.Code, ErrNotAllowedToInvite.Message)
+		httputil.WriteError(w, ErrNotAllowedToInvite.Status, ErrNotAllowedToInvite.Code, ErrNotAllowedToInvite.Message)
 		return
 	}
 
 	// Check if user is already a member.
 	existingMember, _ := p.findMemberByUserAndOrg(ctx, req.UserID, orgID)
 	if existingMember != nil {
-		writeError(w, ErrUserAlreadyMember.Status, ErrUserAlreadyMember.Code, ErrUserAlreadyMember.Message)
+		httputil.WriteError(w, ErrUserAlreadyMember.Status, ErrUserAlreadyMember.Code, ErrUserAlreadyMember.Message)
 		return
 	}
 
@@ -436,18 +442,18 @@ func (p *Plugin) handleAddMember(w http.ResponseWriter, r *http.Request) {
 	if p.opts.MembershipLimit > 0 {
 		count, err := p.countOrgMembers(ctx, orgID)
 		if err == nil && count >= int64(p.opts.MembershipLimit) {
-			writeError(w, ErrMembershipLimitReached.Status, ErrMembershipLimitReached.Code, ErrMembershipLimitReached.Message)
+			httputil.WriteError(w, ErrMembershipLimitReached.Status, ErrMembershipLimitReached.Code, ErrMembershipLimitReached.Message)
 			return
 		}
 	}
 
 	roleStr := parseRoles(req.Role)
 	if !p.rolesExist(roleStr) {
-		writeError(w, ErrInvalidRoleType.Status, ErrInvalidRoleType.Code, ErrInvalidRoleType.Message)
+		httputil.WriteError(w, ErrInvalidRoleType.Status, ErrInvalidRoleType.Code, ErrInvalidRoleType.Message)
 		return
 	}
 	if containsRole(splitRoles(roleStr), "owner") {
-		writeError(w, ErrNotAllowedToInviteRole.Status, ErrNotAllowedToInviteRole.Code, ErrNotAllowedToInviteRole.Message)
+		httputil.WriteError(w, ErrNotAllowedToInviteRole.Status, ErrNotAllowedToInviteRole.Code, ErrNotAllowedToInviteRole.Message)
 		return
 	}
 	now := time.Now().UTC()
@@ -461,9 +467,9 @@ func (p *Plugin) handleAddMember(w http.ResponseWriter, r *http.Request) {
 		"created_at":      now,
 	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to add member")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to add member")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, recordToMember(memberRec))
+	httputil.WriteJSON(w, http.StatusOK, recordToMember(memberRec))
 }

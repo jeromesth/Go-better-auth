@@ -4,8 +4,10 @@
 package betterauth
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/jeromesth/go-better-auth/oauth"
 	"github.com/jeromesth/go-better-auth/plugin"
@@ -21,7 +23,7 @@ type Auth struct {
 	internalAdapter    *InternalAdapter
 	sessionManager     *session.Manager
 	stateStore         *oauth.StateStore
-	rateLimiter        *ratelimit.Limiter
+	rateLimiter        *ratelimit.RateLimiter
 	socialProviders    map[string]social.SocialProvider
 	handler            http.Handler
 	sessionCreateHooks []plugin.SessionCreateHookFn
@@ -30,6 +32,21 @@ type Auth struct {
 
 // New creates a new Auth instance with the provided options.
 // Sensible defaults are applied for any unset fields.
+//
+// New panics if any plugin's Init method returns an error. Plugin initialization
+// failures indicate a programming error (misconfiguration, missing dependency)
+// rather than a recoverable runtime condition, so panicking at startup is
+// preferable to returning a silently broken Auth instance. Wrap the call in a
+// recover if you need to handle Init failures gracefully:
+//
+//	func newAuth(opts BetterAuthOptions) (a *Auth, err error) {
+//	    defer func() {
+//	        if r := recover(); r != nil {
+//	            err = fmt.Errorf("auth init failed: %v", r)
+//	        }
+//	    }()
+//	    return New(opts), nil
+//	}
 func New(opts BetterAuthOptions) *Auth {
 	defaults := defaultOptions()
 
@@ -80,7 +97,10 @@ func New(opts BetterAuthOptions) *Auth {
 
 	// Set up rate limiter.
 	if opts.RateLimit != nil && opts.RateLimit.Enabled {
-		a.rateLimiter = ratelimit.New(opts.RateLimit.Window, opts.RateLimit.Max)
+		a.rateLimiter = ratelimit.New(ratelimit.Config{
+			Limit:  opts.RateLimit.Max,
+			Window: time.Duration(opts.RateLimit.Window) * time.Second,
+		})
 	}
 
 	// Register built-in social providers.
@@ -114,10 +134,14 @@ func New(opts BetterAuthOptions) *Auth {
 		}
 	}
 
-	// Initialize plugins.
+	// Initialize plugins. Any Init error is treated as a programming error
+	// (misconfiguration, missing dependency) and panics immediately rather than
+	// allowing a partially configured Auth instance to be returned to the caller.
 	for _, p := range opts.Plugins {
-		if init, ok := p.(plugin.Initializer); ok {
-			_, _ = init.Init()
+		if initializer, ok := p.(plugin.Initializer); ok {
+			if _, err := initializer.Init(); err != nil {
+				panic(fmt.Sprintf("go-better-auth: plugin %q initialization failed: %v", p.ID(), err))
+			}
 		}
 	}
 
@@ -218,26 +242,21 @@ func (a *Auth) buildRouter() http.Handler {
 	return mux
 }
 
-// isSecure returns true if cookies should be set with Secure flag.
-func (a *Auth) isSecure() bool {
+// IsSecure returns true if cookies should be set with Secure flag.
+func (a *Auth) IsSecure() bool {
 	if a.opts.Advanced != nil {
 		return a.opts.Advanced.UseSecureCookies
 	}
 	return strings.HasPrefix(a.opts.BaseURL, "https://")
 }
 
-// IsSecure is the exported version of isSecure, for use by plugins.
-func (a *Auth) IsSecure() bool { return a.isSecure() }
-
-func (a *Auth) ipHeader() string {
+// IPHeader returns the HTTP header used to extract the client IP address.
+func (a *Auth) IPHeader() string {
 	if a.opts.Advanced != nil {
 		return a.opts.Advanced.IPHeader
 	}
 	return ""
 }
-
-// IPHeader is the exported version of ipHeader, for use by plugins.
-func (a *Auth) IPHeader() string { return a.ipHeader() }
 
 // Handler returns the http.Handler that serves all auth endpoints.
 // Mount this at your chosen base path:

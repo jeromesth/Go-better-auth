@@ -7,6 +7,7 @@ import (
 
 	"github.com/jeromesth/go-better-auth/crypto"
 	"github.com/jeromesth/go-better-auth/internal"
+	"github.com/jeromesth/go-better-auth/internal/httputil"
 	"github.com/jeromesth/go-better-auth/plugin"
 	"github.com/jeromesth/go-better-auth/session"
 )
@@ -19,7 +20,8 @@ type signUpEmailRequest struct {
 
 func (a *Auth) handleSignUpEmail(w http.ResponseWriter, r *http.Request) {
 	var req signUpEmailRequest
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -88,24 +90,24 @@ func (a *Auth) handleSignUpEmail(w http.ResponseWriter, r *http.Request) {
 		// Run session-create hooks (e.g., ban check from admin plugin).
 		if err := a.RunSessionCreateHooks(w, r, user.ID); err != nil {
 			if !errors.Is(err, plugin.ErrHandled) {
-				writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+				httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
 			}
 			return
 		}
-		ip := internal.GetClientIP(r, a.ipHeader())
+		ip := internal.GetClientIP(r, a.IPHeader())
 		ua := r.UserAgent()
 		sess, err := a.sessionManager.Create(ctx, user.ID, ip, ua)
 		if err != nil {
 			ErrInternal.WriteJSON(w)
 			return
 		}
-		session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, a.isSecure())
-		writeJSON(w, http.StatusOK, map[string]any{
+		session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, a.IsSecure())
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{
 			"user":    user,
 			"session": sess,
 		})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"user": user})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"user": user})
 }

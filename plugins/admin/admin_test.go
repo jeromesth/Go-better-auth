@@ -113,8 +113,6 @@ func getUserID(t *testing.T, h http.Handler, cookies []*http.Cookie) string {
 // promoteToAdmin sets a user's role to admin directly via the internal adapter.
 func promoteToAdmin(t *testing.T, auth *betterauth.Auth, userID string) {
 	t.Helper()
-	ctx := auth.Handler().(http.Handler)
-	_ = ctx // just to suppress unused warning
 	_, err := auth.InternalAdapter().UpdateUserRaw(t.Context(), userID, map[string]any{
 		"role": "admin",
 	})
@@ -126,6 +124,7 @@ func promoteToAdmin(t *testing.T, auth *betterauth.Auth, userID string) {
 // --- Tests ---
 
 func TestCreateUser(t *testing.T) {
+	t.Parallel()
 	p := admin.New(nil)
 	auth := newTestAuth(p)
 	h := auth.Handler()
@@ -208,6 +207,7 @@ func TestCreateUser(t *testing.T) {
 }
 
 func TestGetUser(t *testing.T) {
+	t.Parallel()
 	p := admin.New(nil)
 	auth := newTestAuth(p)
 	h := auth.Handler()
@@ -258,6 +258,7 @@ func TestGetUser(t *testing.T) {
 }
 
 func TestListUsers(t *testing.T) {
+	t.Parallel()
 	p := admin.New(nil)
 	auth := newTestAuth(p)
 	h := auth.Handler()
@@ -325,6 +326,7 @@ func TestListUsers(t *testing.T) {
 }
 
 func TestSetRole(t *testing.T) {
+	t.Parallel()
 	p := admin.New(nil)
 	auth := newTestAuth(p)
 	h := auth.Handler()
@@ -364,6 +366,7 @@ func TestSetRole(t *testing.T) {
 }
 
 func TestUpdateUser(t *testing.T) {
+	t.Parallel()
 	p := admin.New(nil)
 	auth := newTestAuth(p)
 	h := auth.Handler()
@@ -404,6 +407,7 @@ func TestUpdateUser(t *testing.T) {
 }
 
 func TestSetUserPassword(t *testing.T) {
+	t.Parallel()
 	p := admin.New(nil)
 	auth := newTestAuth(p)
 	h := auth.Handler()
@@ -457,6 +461,7 @@ func TestSetUserPassword(t *testing.T) {
 }
 
 func TestBanUnban(t *testing.T) {
+	t.Parallel()
 	p := admin.New(nil)
 	auth := newTestAuth(p)
 	h := auth.Handler()
@@ -535,6 +540,7 @@ func TestBanUnban(t *testing.T) {
 }
 
 func TestRemoveUser(t *testing.T) {
+	t.Parallel()
 	p := admin.New(nil)
 	auth := newTestAuth(p)
 	h := auth.Handler()
@@ -582,6 +588,7 @@ func TestRemoveUser(t *testing.T) {
 }
 
 func TestSessionManagement(t *testing.T) {
+	t.Parallel()
 	p := admin.New(nil)
 	auth := newTestAuth(p)
 	h := auth.Handler()
@@ -629,6 +636,7 @@ func TestSessionManagement(t *testing.T) {
 }
 
 func TestImpersonation(t *testing.T) {
+	t.Parallel()
 	p := admin.New(nil)
 	auth := newTestAuth(p)
 	h := auth.Handler()
@@ -696,6 +704,7 @@ func TestImpersonation(t *testing.T) {
 }
 
 func TestHasPermission(t *testing.T) {
+	t.Parallel()
 	p := admin.New(nil)
 	auth := newTestAuth(p)
 	h := auth.Handler()
@@ -745,6 +754,7 @@ func TestHasPermission(t *testing.T) {
 }
 
 func TestDefaultRoleOnSignUp(t *testing.T) {
+	t.Parallel()
 	p := admin.New(&admin.Options{
 		DefaultRole: "member",
 	})
@@ -775,6 +785,7 @@ func TestDefaultRoleOnSignUp(t *testing.T) {
 }
 
 func TestAccessControl(t *testing.T) {
+	t.Parallel()
 	t.Run("default admin role has user create", func(t *testing.T) {
 		result := admin.HasPermission(admin.HasPermissionInput{
 			Role:        "admin",

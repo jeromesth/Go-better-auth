@@ -35,3 +35,6 @@ go.work.sum
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Claude Code AI assistant instructions (local only, not for the repo)
+CLAUDE.md

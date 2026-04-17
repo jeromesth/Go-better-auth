@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.25', '1.26']
+        go-version: ['1.26']
 
     steps:
       - uses: actions/checkout@v4
@@ -33,6 +33,12 @@ jobs:
       - name: E2E Tests
         run: cd e2e && go test ./...
 
+      - name: Testutil Module Build
+        run: cd testutil && go build ./...
+
+      - name: Examples Module Build
+        run: cd examples/backend && go build ./...
+
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
@@ -42,7 +48,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26'
 
       - name: Run tests with coverage
         run: go test -coverprofile=coverage.out -covermode=atomic ./...
@@ -65,7 +71,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26'
 
       - name: Vet
         run: |
@@ -79,3 +85,4 @@ jobs:
             gofmt -d . e2e/
             exit 1
           fi
+

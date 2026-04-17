@@ -8,7 +8,6 @@ import (
 	"crypto/sha1"
 	"encoding/base32"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	betterauth "github.com/jeromesth/go-better-auth"
 	"github.com/jeromesth/go-better-auth/adapter"
 	"github.com/jeromesth/go-better-auth/internal"
+	"github.com/jeromesth/go-better-auth/internal/httputil"
 	"github.com/jeromesth/go-better-auth/plugin"
 	"github.com/jeromesth/go-better-auth/session"
 )
@@ -49,7 +49,11 @@ func New(opts *Options) *Plugin {
 func (p *Plugin) ID() string { return "totp" }
 
 func (p *Plugin) SetAuth(auth any) {
-	p.auth = auth.(*betterauth.Auth)
+	a, ok := auth.(*betterauth.Auth)
+	if !ok {
+		return
+	}
+	p.auth = a
 }
 
 // Schema extends the database with a totp table.
@@ -108,9 +112,7 @@ func (p *Plugin) checkTOTPOnSessionCreate(scc plugin.SessionCreateContext) error
 	}
 
 	// Write the TOTP_REQUIRED response and signal that we've handled it.
-	scc.Writer.Header().Set("Content-Type", "application/json")
-	scc.Writer.WriteHeader(http.StatusForbidden)
-	_ = json.NewEncoder(scc.Writer).Encode(map[string]any{
+	httputil.WriteJSON(scc.Writer, http.StatusForbidden, map[string]any{
 		"code":           "TOTP_REQUIRED",
 		"challengeToken": challengeToken,
 	})
@@ -138,7 +140,7 @@ func (p *Plugin) handleGenerate(w http.ResponseWriter, r *http.Request) {
 
 	secret, err := GenerateSecret()
 	if err != nil {
-		writeTOTPError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to generate secret")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to generate secret")
 		return
 	}
 
@@ -171,7 +173,7 @@ func (p *Plugin) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	writeTOTPJSON(w, http.StatusOK, map[string]string{
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{
 		"secret":     secret,
 		"otpauthURL": otpauthURL,
 	})
@@ -186,19 +188,20 @@ func (p *Plugin) handleEnable(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Code string `json:"code"`
 	}
-	if !decodeTOTPJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 	ctx := r.Context()
 
 	rec, err := p.findTOTPRecord(ctx, userID)
 	if err != nil || rec == nil {
-		writeTOTPError(w, http.StatusBadRequest, "TOTP_NOT_CONFIGURED", "TOTP not configured. Call /totp/generate first.")
+		httputil.WriteError(w, http.StatusBadRequest, "TOTP_NOT_CONFIGURED", "TOTP not configured. Call /totp/generate first.")
 		return
 	}
 	secret, _ := rec["secret"].(string)
 	if !VerifyTOTP(secret, req.Code, time.Now().UTC()) {
-		writeTOTPError(w, http.StatusBadRequest, "INVALID_TOTP_CODE", "Invalid TOTP code")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_TOTP_CODE", "Invalid TOTP code")
 		return
 	}
 
@@ -206,7 +209,7 @@ func (p *Plugin) handleEnable(w http.ResponseWriter, r *http.Request) {
 		Where: []adapter.Where{adapter.EQ("user_id", userID)},
 	}, map[string]any{"enabled": true, "updated_at": time.Now().UTC()})
 
-	writeTOTPJSON(w, http.StatusOK, map[string]bool{"enabled": true})
+	httputil.WriteJSON(w, http.StatusOK, map[string]bool{"enabled": true})
 }
 
 // handleDisable verifies the TOTP code and disables 2FA.
@@ -218,31 +221,32 @@ func (p *Plugin) handleDisable(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Code string `json:"code"`
 	}
-	if !decodeTOTPJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 	ctx := r.Context()
 
 	rec, err := p.findTOTPRecord(ctx, userID)
 	if err != nil || rec == nil {
-		writeTOTPError(w, http.StatusBadRequest, "TOTP_NOT_CONFIGURED", "TOTP is not configured")
+		httputil.WriteError(w, http.StatusBadRequest, "TOTP_NOT_CONFIGURED", "TOTP is not configured")
 		return
 	}
 	enabled, _ := rec["enabled"].(bool)
 	if !enabled {
-		writeTOTPError(w, http.StatusBadRequest, "TOTP_NOT_ENABLED", "TOTP is not enabled")
+		httputil.WriteError(w, http.StatusBadRequest, "TOTP_NOT_ENABLED", "TOTP is not enabled")
 		return
 	}
 	secret, _ := rec["secret"].(string)
 	if !VerifyTOTP(secret, req.Code, time.Now().UTC()) {
-		writeTOTPError(w, http.StatusBadRequest, "INVALID_TOTP_CODE", "Invalid TOTP code")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_TOTP_CODE", "Invalid TOTP code")
 		return
 	}
 
 	_ = p.auth.InternalAdapter().Adapter().Delete(ctx, "totp", adapter.Query{
 		Where: []adapter.Where{adapter.EQ("user_id", userID)},
 	})
-	writeTOTPJSON(w, http.StatusOK, map[string]bool{"enabled": false})
+	httputil.WriteJSON(w, http.StatusOK, map[string]bool{"enabled": false})
 }
 
 // handleStatus returns TOTP enabled status for the authenticated user.
@@ -255,11 +259,11 @@ func (p *Plugin) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	rec, err := p.findTOTPRecord(ctx, userID)
 	if err != nil || rec == nil {
-		writeTOTPJSON(w, http.StatusOK, map[string]bool{"enabled": false})
+		httputil.WriteJSON(w, http.StatusOK, map[string]bool{"enabled": false})
 		return
 	}
 	enabled, _ := rec["enabled"].(bool)
-	writeTOTPJSON(w, http.StatusOK, map[string]bool{"enabled": enabled})
+	httputil.WriteJSON(w, http.StatusOK, map[string]bool{"enabled": enabled})
 }
 
 // handleVerify exchanges a challenge token + TOTP code for a real session.
@@ -268,11 +272,12 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 		ChallengeToken string `json:"challengeToken"`
 		Code           string `json:"code"`
 	}
-	if !decodeTOTPJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 	if req.ChallengeToken == "" || req.Code == "" {
-		writeTOTPError(w, http.StatusBadRequest, "INVALID_REQUEST", "challengeToken and code are required")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_REQUEST", "challengeToken and code are required")
 		return
 	}
 
@@ -283,7 +288,7 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 		Where: []adapter.Where{adapter.EQ("value", req.ChallengeToken)},
 	})
 	if err != nil || chalRec == nil {
-		writeTOTPError(w, http.StatusUnauthorized, "INVALID_CHALLENGE", "Invalid or expired challenge token")
+		httputil.WriteError(w, http.StatusUnauthorized, "INVALID_CHALLENGE", "Invalid or expired challenge token")
 		return
 	}
 
@@ -292,14 +297,14 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 		_ = p.auth.InternalAdapter().Adapter().Delete(ctx, "verification", adapter.Query{
 			Where: []adapter.Where{adapter.EQ("value", req.ChallengeToken)},
 		})
-		writeTOTPError(w, http.StatusUnauthorized, "CHALLENGE_EXPIRED", "Challenge token has expired")
+		httputil.WriteError(w, http.StatusUnauthorized, "CHALLENGE_EXPIRED", "Challenge token has expired")
 		return
 	}
 
 	// Extract userID from identifier "totp:<userID>".
 	identifier, _ := chalRec["identifier"].(string)
 	if !strings.HasPrefix(identifier, "totp:") {
-		writeTOTPError(w, http.StatusUnauthorized, "INVALID_CHALLENGE", "Invalid challenge token")
+		httputil.WriteError(w, http.StatusUnauthorized, "INVALID_CHALLENGE", "Invalid challenge token")
 		return
 	}
 	userID := strings.TrimPrefix(identifier, "totp:")
@@ -307,12 +312,12 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 	// Look up the TOTP record and verify the code.
 	totpRec, err := p.findTOTPRecord(ctx, userID)
 	if err != nil || totpRec == nil {
-		writeTOTPError(w, http.StatusUnauthorized, "TOTP_NOT_CONFIGURED", "TOTP not configured")
+		httputil.WriteError(w, http.StatusUnauthorized, "TOTP_NOT_CONFIGURED", "TOTP not configured")
 		return
 	}
 	secret, _ := totpRec["secret"].(string)
 	if !VerifyTOTP(secret, req.Code, time.Now().UTC()) {
-		writeTOTPError(w, http.StatusUnauthorized, "INVALID_TOTP_CODE", "Invalid TOTP code")
+		httputil.WriteError(w, http.StatusUnauthorized, "INVALID_TOTP_CODE", "Invalid TOTP code")
 		return
 	}
 
@@ -326,18 +331,18 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 	ua := r.UserAgent()
 	sess, err := p.auth.SessionManager().Create(ctx, userID, ip, ua)
 	if err != nil {
-		writeTOTPError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create session")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create session")
 		return
 	}
 
 	user, err := p.auth.InternalAdapter().FindUserByID(ctx, userID)
 	if err != nil || user == nil {
-		writeTOTPError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load user")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load user")
 		return
 	}
 
 	session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, p.auth.IsSecure())
-	writeTOTPJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"user":    user,
 		"session": sess,
 	})
@@ -354,13 +359,13 @@ func (p *Plugin) findTOTPRecord(ctx context.Context, userID string) (map[string]
 func (p *Plugin) getAuthenticatedUserID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	token := session.GetSessionToken(r)
 	if token == "" {
-		writeTOTPError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
 		return "", false
 	}
 	ctx := r.Context()
 	sess, err := p.auth.SessionManager().FindByToken(ctx, token)
 	if err != nil || sess == nil || session.IsExpired(sess) {
-		writeTOTPError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
 		return "", false
 	}
 	return sess.UserID, true
@@ -423,30 +428,4 @@ func VerifyTOTP(secret, code string, t time.Time) bool {
 		}
 	}
 	return false
-}
-
-// --- JSON helpers ---
-
-func writeTOTPError(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": message})
-}
-
-func writeTOTPJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func decodeTOTPJSON(w http.ResponseWriter, r *http.Request, v any) bool {
-	if r.Body == nil {
-		writeTOTPError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
-		return false
-	}
-	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		writeTOTPError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
-		return false
-	}
-	return true
 }

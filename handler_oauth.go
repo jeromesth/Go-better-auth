@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/jeromesth/go-better-auth/internal"
+	"github.com/jeromesth/go-better-auth/internal/httputil"
 	"github.com/jeromesth/go-better-auth/plugin"
 	"github.com/jeromesth/go-better-auth/session"
 )
@@ -136,12 +137,12 @@ func (a *Auth) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	if err := a.RunSessionCreateHooks(w, r, userID); err != nil {
 		if !errors.Is(err, plugin.ErrHandled) {
-			writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+			httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
 		}
 		return
 	}
 
-	ip := internal.GetClientIP(r, a.ipHeader())
+	ip := internal.GetClientIP(r, a.IPHeader())
 	ua := r.UserAgent()
 	sess, err := a.sessionManager.Create(ctx, userID, ip, ua)
 	if err != nil {
@@ -149,7 +150,7 @@ func (a *Auth) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, a.isSecure())
+	session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, a.IsSecure())
 
 	redirectURL := stateEntry.CallbackURL
 	if redirectURL == "" {
@@ -181,7 +182,8 @@ func (a *Auth) handleLinkSocial(w http.ResponseWriter, r *http.Request) {
 		Provider    string `json:"provider"`
 		CallbackURL string `json:"callbackURL"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -212,5 +214,5 @@ func (a *Auth) handleLinkSocial(w http.ResponseWriter, r *http.Request) {
 	}
 
 	authURL := provider.AuthorizationURL(state, "", providerCfg)
-	writeJSON(w, http.StatusOK, map[string]string{"url": authURL})
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"url": authURL})
 }

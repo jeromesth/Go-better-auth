@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jeromesth/go-better-auth/adapter"
+	"github.com/jeromesth/go-better-auth/internal/httputil"
 	"github.com/jeromesth/go-better-auth/session"
 )
 
@@ -18,7 +19,8 @@ func (p *Plugin) handleCreateOrganization(w http.ResponseWriter, r *http.Request
 		Logo     string `json:"logo,omitempty"`
 		Metadata any    `json:"metadata,omitempty"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -29,7 +31,7 @@ func (p *Plugin) handleCreateOrganization(w http.ResponseWriter, r *http.Request
 
 	// Check if user is allowed to create organizations.
 	if p.opts.AllowUserToCreateOrganization != nil && !*p.opts.AllowUserToCreateOrganization {
-		writeError(w, ErrNotAllowedToCreate.Status, ErrNotAllowedToCreate.Code, ErrNotAllowedToCreate.Message)
+		httputil.WriteError(w, ErrNotAllowedToCreate.Status, ErrNotAllowedToCreate.Code, ErrNotAllowedToCreate.Message)
 		return
 	}
 
@@ -37,11 +39,11 @@ func (p *Plugin) handleCreateOrganization(w http.ResponseWriter, r *http.Request
 	name := strings.TrimSpace(req.Name)
 
 	if slug == "" {
-		writeError(w, ErrEmptySlug.Status, ErrEmptySlug.Code, ErrEmptySlug.Message)
+		httputil.WriteError(w, ErrEmptySlug.Status, ErrEmptySlug.Code, ErrEmptySlug.Message)
 		return
 	}
 	if name == "" {
-		writeError(w, ErrEmptyName.Status, ErrEmptyName.Code, ErrEmptyName.Message)
+		httputil.WriteError(w, ErrEmptyName.Status, ErrEmptyName.Code, ErrEmptyName.Message)
 		return
 	}
 
@@ -52,7 +54,7 @@ func (p *Plugin) handleCreateOrganization(w http.ResponseWriter, r *http.Request
 	if p.opts.OrganizationLimit > 0 {
 		count, err := p.countUserOrganizations(ctx, userID)
 		if err == nil && count >= int64(p.opts.OrganizationLimit) {
-			writeError(w, ErrOrganizationLimitReached.Status, ErrOrganizationLimitReached.Code, ErrOrganizationLimitReached.Message)
+			httputil.WriteError(w, ErrOrganizationLimitReached.Status, ErrOrganizationLimitReached.Code, ErrOrganizationLimitReached.Message)
 			return
 		}
 	}
@@ -62,7 +64,7 @@ func (p *Plugin) handleCreateOrganization(w http.ResponseWriter, r *http.Request
 		Where: []adapter.Where{adapter.EQ("slug", slug)},
 	})
 	if err == nil && existing != nil {
-		writeError(w, ErrSlugAlreadyTaken.Status, ErrSlugAlreadyTaken.Code, ErrSlugAlreadyTaken.Message)
+		httputil.WriteError(w, ErrSlugAlreadyTaken.Status, ErrSlugAlreadyTaken.Code, ErrSlugAlreadyTaken.Message)
 		return
 	}
 
@@ -84,7 +86,7 @@ func (p *Plugin) handleCreateOrganization(w http.ResponseWriter, r *http.Request
 
 	orgRec, err := adp.Create(ctx, "organization", orgData)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create organization")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create organization")
 		return
 	}
 
@@ -98,7 +100,7 @@ func (p *Plugin) handleCreateOrganization(w http.ResponseWriter, r *http.Request
 		"created_at":      now,
 	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create member")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create member")
 		return
 	}
 
@@ -106,7 +108,7 @@ func (p *Plugin) handleCreateOrganization(w http.ResponseWriter, r *http.Request
 	token := session.GetSessionToken(r)
 	_ = p.setActiveOrgOnSession(ctx, token, orgID)
 
-	writeJSON(w, http.StatusOK, recordToOrganization(orgRec))
+	httputil.WriteJSON(w, http.StatusOK, recordToOrganization(orgRec))
 }
 
 // --- POST /organization/update ---
@@ -121,7 +123,8 @@ func (p *Plugin) handleUpdateOrganization(w http.ResponseWriter, r *http.Request
 			Metadata any     `json:"metadata,omitempty"`
 		} `json:"data"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -138,20 +141,20 @@ func (p *Plugin) handleUpdateOrganization(w http.ResponseWriter, r *http.Request
 		orgID = getActiveOrgID(sessRaw)
 	}
 	if orgID == "" {
-		writeError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
+		httputil.WriteError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
 		return
 	}
 
 	// Check membership and permissions.
 	memberRec, err := p.findMemberByUserAndOrg(ctx, userID, orgID)
 	if err != nil || memberRec == nil {
-		writeError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
+		httputil.WriteError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
 		return
 	}
 
 	memberRole, _ := memberRec["role"].(string)
 	if !HasPermission(memberRole, map[string][]string{"organization": {"update"}}, p.opts.Roles) {
-		writeError(w, ErrNotAllowedToUpdate.Status, ErrNotAllowedToUpdate.Code, ErrNotAllowedToUpdate.Message)
+		httputil.WriteError(w, ErrNotAllowedToUpdate.Status, ErrNotAllowedToUpdate.Code, ErrNotAllowedToUpdate.Message)
 		return
 	}
 
@@ -160,7 +163,7 @@ func (p *Plugin) handleUpdateOrganization(w http.ResponseWriter, r *http.Request
 	if req.Data.Name != nil {
 		name := strings.TrimSpace(*req.Data.Name)
 		if name == "" {
-			writeError(w, ErrEmptyName.Status, ErrEmptyName.Code, ErrEmptyName.Message)
+			httputil.WriteError(w, ErrEmptyName.Status, ErrEmptyName.Code, ErrEmptyName.Message)
 			return
 		}
 		updates["name"] = name
@@ -168,7 +171,7 @@ func (p *Plugin) handleUpdateOrganization(w http.ResponseWriter, r *http.Request
 	if req.Data.Slug != nil {
 		slug := strings.TrimSpace(*req.Data.Slug)
 		if slug == "" {
-			writeError(w, ErrEmptySlug.Status, ErrEmptySlug.Code, ErrEmptySlug.Message)
+			httputil.WriteError(w, ErrEmptySlug.Status, ErrEmptySlug.Code, ErrEmptySlug.Message)
 			return
 		}
 		// Check slug uniqueness (not counting current org).
@@ -178,7 +181,7 @@ func (p *Plugin) handleUpdateOrganization(w http.ResponseWriter, r *http.Request
 		if err == nil && existing != nil {
 			existingID, _ := existing["id"].(string)
 			if existingID != orgID {
-				writeError(w, ErrSlugAlreadyTaken.Status, ErrSlugAlreadyTaken.Code, ErrSlugAlreadyTaken.Message)
+				httputil.WriteError(w, ErrSlugAlreadyTaken.Status, ErrSlugAlreadyTaken.Code, ErrSlugAlreadyTaken.Message)
 				return
 			}
 		}
@@ -195,11 +198,11 @@ func (p *Plugin) handleUpdateOrganization(w http.ResponseWriter, r *http.Request
 		Where: []adapter.Where{adapter.EQ("id", orgID)},
 	}, updates)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update organization")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update organization")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, recordToOrganization(rec))
+	httputil.WriteJSON(w, http.StatusOK, recordToOrganization(rec))
 }
 
 // --- POST /organization/delete ---
@@ -208,7 +211,8 @@ func (p *Plugin) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 	var req struct {
 		OrganizationID string `json:"organizationId"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -225,20 +229,20 @@ func (p *Plugin) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 		orgID = getActiveOrgID(sessRaw)
 	}
 	if orgID == "" {
-		writeError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
+		httputil.WriteError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
 		return
 	}
 
 	// Check membership and permissions.
 	memberRec, err := p.findMemberByUserAndOrg(ctx, userID, orgID)
 	if err != nil || memberRec == nil {
-		writeError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
+		httputil.WriteError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
 		return
 	}
 
 	memberRole, _ := memberRec["role"].(string)
 	if !HasPermission(memberRole, map[string][]string{"organization": {"delete"}}, p.opts.Roles) {
-		writeError(w, ErrNotAllowedToDelete.Status, ErrNotAllowedToDelete.Code, ErrNotAllowedToDelete.Message)
+		httputil.WriteError(w, ErrNotAllowedToDelete.Status, ErrNotAllowedToDelete.Code, ErrNotAllowedToDelete.Message)
 		return
 	}
 
@@ -253,11 +257,11 @@ func (p *Plugin) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 		Where: []adapter.Where{adapter.EQ("id", orgID)},
 	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete organization")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete organization")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
 // --- GET /organization/check-slug ---
@@ -270,7 +274,7 @@ func (p *Plugin) handleCheckSlug(w http.ResponseWriter, r *http.Request) {
 
 	slug := r.URL.Query().Get("slug")
 	if slug == "" {
-		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "slug is required")
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "slug is required")
 		return
 	}
 
@@ -279,11 +283,11 @@ func (p *Plugin) handleCheckSlug(w http.ResponseWriter, r *http.Request) {
 		Where: []adapter.Where{adapter.EQ("slug", slug)},
 	})
 	if err != nil || existing == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"status": true})
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{"status": true})
 		return
 	}
 
-	writeError(w, ErrSlugAlreadyTaken.Status, ErrSlugAlreadyTaken.Code, ErrSlugAlreadyTaken.Message)
+	httputil.WriteError(w, ErrSlugAlreadyTaken.Status, ErrSlugAlreadyTaken.Code, ErrSlugAlreadyTaken.Message)
 }
 
 // --- GET /organization/list ---
@@ -302,7 +306,7 @@ func (p *Plugin) handleListOrganizations(w http.ResponseWriter, r *http.Request)
 		Where: []adapter.Where{adapter.EQ("user_id", userID)},
 	})
 	if err != nil {
-		writeJSON(w, http.StatusOK, []any{})
+		httputil.WriteJSON(w, http.StatusOK, []any{})
 		return
 	}
 
@@ -322,7 +326,7 @@ func (p *Plugin) handleListOrganizations(w http.ResponseWriter, r *http.Request)
 		orgs = []*Organization{}
 	}
 
-	writeJSON(w, http.StatusOK, orgs)
+	httputil.WriteJSON(w, http.StatusOK, orgs)
 }
 
 // --- POST /organization/set-active ---
@@ -332,7 +336,8 @@ func (p *Plugin) handleSetActiveOrganization(w http.ResponseWriter, r *http.Requ
 		OrganizationID   string `json:"organizationId,omitempty"`
 		OrganizationSlug string `json:"organizationSlug,omitempty"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -354,7 +359,7 @@ func (p *Plugin) handleSetActiveOrganization(w http.ResponseWriter, r *http.Requ
 			Where: []adapter.Where{adapter.EQ("slug", req.OrganizationSlug)},
 		})
 		if err != nil || orgRec == nil {
-			writeError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
+			httputil.WriteError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
 			return
 		}
 		orgID, _ = orgRec["id"].(string)
@@ -363,14 +368,14 @@ func (p *Plugin) handleSetActiveOrganization(w http.ResponseWriter, r *http.Requ
 	if orgID == "" {
 		// Clear active organization.
 		_ = p.setActiveOrgOnSession(ctx, token, "")
-		writeJSON(w, http.StatusOK, map[string]any{"session": map[string]any{"activeOrganizationId": nil}})
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{"session": map[string]any{"activeOrganizationId": nil}})
 		return
 	}
 
 	// Verify membership.
 	memberRec, err := p.findMemberByUserAndOrg(ctx, userID, orgID)
 	if err != nil || memberRec == nil {
-		writeError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
+		httputil.WriteError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
 		return
 	}
 
@@ -381,7 +386,7 @@ func (p *Plugin) handleSetActiveOrganization(w http.ResponseWriter, r *http.Requ
 		Where: []adapter.Where{adapter.EQ("id", orgID)},
 	})
 	if err != nil || orgRec == nil {
-		writeError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
+		httputil.WriteError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
 		return
 	}
 
@@ -396,7 +401,7 @@ func (p *Plugin) handleSetActiveOrganization(w http.ResponseWriter, r *http.Requ
 		members = append(members, recordToMember(m))
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"organization": org,
 		"members":      members,
 		"session": map[string]any{
@@ -432,14 +437,14 @@ func (p *Plugin) handleGetFullOrganization(w http.ResponseWriter, r *http.Reques
 		orgID = getActiveOrgID(sessRaw)
 	}
 	if orgID == "" {
-		writeError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
+		httputil.WriteError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
 		return
 	}
 
 	// Check membership.
 	memberRec, err := p.findMemberByUserAndOrg(ctx, userID, orgID)
 	if err != nil || memberRec == nil {
-		writeError(w, ErrNotAllowedToUpdate.Status, "FORBIDDEN", "You are not a member of this organization")
+		httputil.WriteError(w, ErrNotAllowedToUpdate.Status, "FORBIDDEN", "You are not a member of this organization")
 		return
 	}
 
@@ -447,7 +452,7 @@ func (p *Plugin) handleGetFullOrganization(w http.ResponseWriter, r *http.Reques
 		Where: []adapter.Where{adapter.EQ("id", orgID)},
 	})
 	if err != nil || orgRec == nil {
-		writeError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
+		httputil.WriteError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
 		return
 	}
 
@@ -483,5 +488,5 @@ func (p *Plugin) handleGetFullOrganization(w http.ResponseWriter, r *http.Reques
 		Invitations:  invitations,
 	}
 
-	writeJSON(w, http.StatusOK, full)
+	httputil.WriteJSON(w, http.StatusOK, full)
 }

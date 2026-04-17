@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jeromesth/go-better-auth/adapter"
+	"github.com/jeromesth/go-better-auth/internal/httputil"
 	"github.com/jeromesth/go-better-auth/session"
 )
 
@@ -18,7 +19,8 @@ func (p *Plugin) handleInviteMember(w http.ResponseWriter, r *http.Request) {
 		Role           any    `json:"role"`
 		Resend         bool   `json:"resend,omitempty"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -35,38 +37,38 @@ func (p *Plugin) handleInviteMember(w http.ResponseWriter, r *http.Request) {
 		orgID = getActiveOrgID(sessRaw)
 	}
 	if orgID == "" {
-		writeError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
+		httputil.WriteError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
 		return
 	}
 
 	// Check membership and permissions.
 	memberRec, err := p.findMemberByUserAndOrg(ctx, userID, orgID)
 	if err != nil || memberRec == nil {
-		writeError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
+		httputil.WriteError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
 		return
 	}
 
 	memberRole, _ := memberRec["role"].(string)
 	if !HasPermission(memberRole, map[string][]string{"invitation": {"create"}}, p.opts.Roles) {
-		writeError(w, ErrNotAllowedToInvite.Status, ErrNotAllowedToInvite.Code, ErrNotAllowedToInvite.Message)
+		httputil.WriteError(w, ErrNotAllowedToInvite.Status, ErrNotAllowedToInvite.Code, ErrNotAllowedToInvite.Message)
 		return
 	}
 
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 	if email == "" {
-		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "email is required")
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "email is required")
 		return
 	}
 	roleStr := parseRoles(req.Role)
 	if !p.rolesExist(roleStr) {
-		writeError(w, ErrInvalidRoleType.Status, ErrInvalidRoleType.Code, ErrInvalidRoleType.Message)
+		httputil.WriteError(w, ErrInvalidRoleType.Status, ErrInvalidRoleType.Code, ErrInvalidRoleType.Message)
 		return
 	}
 
 	// Single-owner invariant: owner role is only assigned via explicit transfer.
 	invitedRoles := splitRoles(roleStr)
 	if containsRole(invitedRoles, "owner") {
-		writeError(w, ErrNotAllowedToInviteRole.Status, ErrNotAllowedToInviteRole.Code, ErrNotAllowedToInviteRole.Message)
+		httputil.WriteError(w, ErrNotAllowedToInviteRole.Status, ErrNotAllowedToInviteRole.Code, ErrNotAllowedToInviteRole.Message)
 		return
 	}
 
@@ -75,7 +77,7 @@ func (p *Plugin) handleInviteMember(w http.ResponseWriter, r *http.Request) {
 	if existingUser != nil {
 		existingMember, _ := p.findMemberByUserAndOrg(ctx, existingUser.ID, orgID)
 		if existingMember != nil {
-			writeError(w, ErrUserAlreadyMember.Status, ErrUserAlreadyMember.Code, ErrUserAlreadyMember.Message)
+			httputil.WriteError(w, ErrUserAlreadyMember.Status, ErrUserAlreadyMember.Code, ErrUserAlreadyMember.Message)
 			return
 		}
 	}
@@ -93,7 +95,7 @@ func (p *Plugin) handleInviteMember(w http.ResponseWriter, r *http.Request) {
 		if strings.EqualFold(invEmail, email) {
 			if req.Resend {
 				// Return existing invitation.
-				writeJSON(w, http.StatusOK, recordToInvitation(inv))
+				httputil.WriteJSON(w, http.StatusOK, recordToInvitation(inv))
 				return
 			}
 			if p.opts.CancelPendingInvitationsOnReInvite {
@@ -104,7 +106,7 @@ func (p *Plugin) handleInviteMember(w http.ResponseWriter, r *http.Request) {
 				}, map[string]any{"status": "cancelled"})
 				break
 			}
-			writeError(w, ErrUserAlreadyInvited.Status, ErrUserAlreadyInvited.Code, ErrUserAlreadyInvited.Message)
+			httputil.WriteError(w, ErrUserAlreadyInvited.Status, ErrUserAlreadyInvited.Code, ErrUserAlreadyInvited.Message)
 			return
 		}
 	}
@@ -113,7 +115,7 @@ func (p *Plugin) handleInviteMember(w http.ResponseWriter, r *http.Request) {
 	if p.opts.InvitationLimit > 0 {
 		count, err := p.countPendingInvitations(ctx, orgID)
 		if err == nil && count >= int64(p.opts.InvitationLimit) {
-			writeError(w, ErrInvitationLimitReached.Status, ErrInvitationLimitReached.Code, ErrInvitationLimitReached.Message)
+			httputil.WriteError(w, ErrInvitationLimitReached.Status, ErrInvitationLimitReached.Code, ErrInvitationLimitReached.Message)
 			return
 		}
 	}
@@ -122,7 +124,7 @@ func (p *Plugin) handleInviteMember(w http.ResponseWriter, r *http.Request) {
 	if p.opts.MembershipLimit > 0 {
 		count, err := p.countOrgMembers(ctx, orgID)
 		if err == nil && count >= int64(p.opts.MembershipLimit) {
-			writeError(w, ErrMembershipLimitReached.Status, ErrMembershipLimitReached.Code, ErrMembershipLimitReached.Message)
+			httputil.WriteError(w, ErrMembershipLimitReached.Status, ErrMembershipLimitReached.Code, ErrMembershipLimitReached.Message)
 			return
 		}
 	}
@@ -144,7 +146,7 @@ func (p *Plugin) handleInviteMember(w http.ResponseWriter, r *http.Request) {
 
 	invRec, err := adp.Create(ctx, "invitation", invData)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create invitation")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create invitation")
 		return
 	}
 
@@ -170,7 +172,7 @@ func (p *Plugin) handleInviteMember(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	writeJSON(w, http.StatusOK, recordToInvitation(invRec))
+	httputil.WriteJSON(w, http.StatusOK, recordToInvitation(invRec))
 }
 
 // --- POST /organization/accept-invitation ---
@@ -179,7 +181,8 @@ func (p *Plugin) handleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 	var req struct {
 		InvitationID string `json:"invitationId"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -195,32 +198,32 @@ func (p *Plugin) handleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 		Where: []adapter.Where{adapter.EQ("id", req.InvitationID)},
 	})
 	if err != nil || invRec == nil {
-		writeError(w, ErrInvitationNotFound.Status, ErrInvitationNotFound.Code, ErrInvitationNotFound.Message)
+		httputil.WriteError(w, ErrInvitationNotFound.Status, ErrInvitationNotFound.Code, ErrInvitationNotFound.Message)
 		return
 	}
 
 	status, _ := invRec["status"].(string)
 	if status != "pending" {
-		writeError(w, ErrInvitationAlreadyAccepted.Status, ErrInvitationAlreadyAccepted.Code, "Invitation is no longer pending")
+		httputil.WriteError(w, ErrInvitationAlreadyAccepted.Status, ErrInvitationAlreadyAccepted.Code, "Invitation is no longer pending")
 		return
 	}
 
 	// Invitations are email-bound: only the invited email can accept.
 	userEmail, err := p.getUserEmail(ctx, userID)
 	if err != nil || userEmail == "" {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load user")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load user")
 		return
 	}
 	invitationEmail, _ := invRec["email"].(string)
 	if !strings.EqualFold(invitationEmail, userEmail) {
-		writeError(w, ErrInvitationNotFound.Status, ErrInvitationNotFound.Code, ErrInvitationNotFound.Message)
+		httputil.WriteError(w, ErrInvitationNotFound.Status, ErrInvitationNotFound.Code, ErrInvitationNotFound.Message)
 		return
 	}
 
 	// Check expiration.
 	expiresAt, _ := invRec["expires_at"].(time.Time)
 	if !expiresAt.IsZero() && time.Now().UTC().After(expiresAt) {
-		writeError(w, ErrInvitationExpired.Status, ErrInvitationExpired.Code, ErrInvitationExpired.Message)
+		httputil.WriteError(w, ErrInvitationExpired.Status, ErrInvitationExpired.Code, ErrInvitationExpired.Message)
 		return
 	}
 
@@ -230,7 +233,7 @@ func (p *Plugin) handleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 	// Check if user is already a member.
 	existingMember, _ := p.findMemberByUserAndOrg(ctx, userID, orgID)
 	if existingMember != nil {
-		writeError(w, ErrUserAlreadyMember.Status, ErrUserAlreadyMember.Code, ErrUserAlreadyMember.Message)
+		httputil.WriteError(w, ErrUserAlreadyMember.Status, ErrUserAlreadyMember.Code, ErrUserAlreadyMember.Message)
 		return
 	}
 
@@ -238,7 +241,7 @@ func (p *Plugin) handleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 	if p.opts.MembershipLimit > 0 {
 		count, err := p.countOrgMembers(ctx, orgID)
 		if err == nil && count >= int64(p.opts.MembershipLimit) {
-			writeError(w, ErrMembershipLimitReached.Status, ErrMembershipLimitReached.Code, ErrMembershipLimitReached.Message)
+			httputil.WriteError(w, ErrMembershipLimitReached.Status, ErrMembershipLimitReached.Code, ErrMembershipLimitReached.Message)
 			return
 		}
 	}
@@ -254,7 +257,7 @@ func (p *Plugin) handleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 		"created_at":      now,
 	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create member")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create member")
 		return
 	}
 
@@ -267,7 +270,7 @@ func (p *Plugin) handleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 	token := session.GetSessionToken(r)
 	_ = p.setActiveOrgOnSession(ctx, token, orgID)
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"member":     recordToMember(memberRec),
 		"invitation": recordToInvitation(invRec),
 	})
@@ -279,7 +282,8 @@ func (p *Plugin) handleRejectInvitation(w http.ResponseWriter, r *http.Request) 
 	var req struct {
 		InvitationID string `json:"invitationId"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -295,19 +299,19 @@ func (p *Plugin) handleRejectInvitation(w http.ResponseWriter, r *http.Request) 
 		Where: []adapter.Where{adapter.EQ("id", req.InvitationID)},
 	})
 	if err != nil || invRec == nil {
-		writeError(w, ErrInvitationNotFound.Status, ErrInvitationNotFound.Code, ErrInvitationNotFound.Message)
+		httputil.WriteError(w, ErrInvitationNotFound.Status, ErrInvitationNotFound.Code, ErrInvitationNotFound.Message)
 		return
 	}
 
 	// Invitations are email-bound: only the invited email can reject.
 	userEmail, err := p.getUserEmail(ctx, userID)
 	if err != nil || userEmail == "" {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load user")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load user")
 		return
 	}
 	invitationEmail, _ := invRec["email"].(string)
 	if !strings.EqualFold(invitationEmail, userEmail) {
-		writeError(w, ErrInvitationNotFound.Status, ErrInvitationNotFound.Code, ErrInvitationNotFound.Message)
+		httputil.WriteError(w, ErrInvitationNotFound.Status, ErrInvitationNotFound.Code, ErrInvitationNotFound.Message)
 		return
 	}
 
@@ -318,7 +322,7 @@ func (p *Plugin) handleRejectInvitation(w http.ResponseWriter, r *http.Request) 
 	inv := recordToInvitation(invRec)
 	inv.Status = "rejected"
 
-	writeJSON(w, http.StatusOK, inv)
+	httputil.WriteJSON(w, http.StatusOK, inv)
 }
 
 // --- POST /organization/cancel-invitation ---
@@ -327,7 +331,8 @@ func (p *Plugin) handleCancelInvitation(w http.ResponseWriter, r *http.Request) 
 	var req struct {
 		InvitationID string `json:"invitationId"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -343,7 +348,7 @@ func (p *Plugin) handleCancelInvitation(w http.ResponseWriter, r *http.Request) 
 		Where: []adapter.Where{adapter.EQ("id", req.InvitationID)},
 	})
 	if err != nil || invRec == nil {
-		writeError(w, ErrInvitationNotFound.Status, ErrInvitationNotFound.Code, ErrInvitationNotFound.Message)
+		httputil.WriteError(w, ErrInvitationNotFound.Status, ErrInvitationNotFound.Code, ErrInvitationNotFound.Message)
 		return
 	}
 
@@ -355,13 +360,13 @@ func (p *Plugin) handleCancelInvitation(w http.ResponseWriter, r *http.Request) 
 	// Check membership and permissions.
 	memberRec, err := p.findMemberByUserAndOrg(ctx, userID, orgID)
 	if err != nil || memberRec == nil {
-		writeError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
+		httputil.WriteError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
 		return
 	}
 
 	memberRole, _ := memberRec["role"].(string)
 	if !HasPermission(memberRole, map[string][]string{"invitation": {"cancel"}}, p.opts.Roles) {
-		writeError(w, ErrNotAllowedToCancelInvitation.Status, ErrNotAllowedToCancelInvitation.Code, ErrNotAllowedToCancelInvitation.Message)
+		httputil.WriteError(w, ErrNotAllowedToCancelInvitation.Status, ErrNotAllowedToCancelInvitation.Code, ErrNotAllowedToCancelInvitation.Message)
 		return
 	}
 
@@ -372,7 +377,7 @@ func (p *Plugin) handleCancelInvitation(w http.ResponseWriter, r *http.Request) 
 	inv := recordToInvitation(invRec)
 	inv.Status = "cancelled"
 
-	writeJSON(w, http.StatusOK, inv)
+	httputil.WriteJSON(w, http.StatusOK, inv)
 }
 
 // --- GET /organization/get-invitation ---
@@ -385,7 +390,7 @@ func (p *Plugin) handleGetInvitation(w http.ResponseWriter, r *http.Request) {
 
 	invID := r.URL.Query().Get("invitationId")
 	if invID == "" {
-		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "invitationId is required")
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "invitationId is required")
 		return
 	}
 
@@ -396,21 +401,21 @@ func (p *Plugin) handleGetInvitation(w http.ResponseWriter, r *http.Request) {
 		Where: []adapter.Where{adapter.EQ("id", invID)},
 	})
 	if err != nil || invRec == nil {
-		writeError(w, ErrInvitationNotFound.Status, ErrInvitationNotFound.Code, ErrInvitationNotFound.Message)
+		httputil.WriteError(w, ErrInvitationNotFound.Status, ErrInvitationNotFound.Code, ErrInvitationNotFound.Message)
 		return
 	}
 
 	inv := recordToInvitation(invRec)
 	userEmail, err := p.getUserEmail(ctx, userID)
 	if err != nil || userEmail == "" {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load user")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load user")
 		return
 	}
 	// The invitation is visible to the invitee or organization members only.
 	if !strings.EqualFold(inv.Email, userEmail) {
 		memberRec, err := p.findMemberByUserAndOrg(ctx, userID, inv.OrganizationID)
 		if err != nil || memberRec == nil {
-			writeError(w, ErrInvitationNotFound.Status, ErrInvitationNotFound.Code, ErrInvitationNotFound.Message)
+			httputil.WriteError(w, ErrInvitationNotFound.Status, ErrInvitationNotFound.Code, ErrInvitationNotFound.Message)
 			return
 		}
 	}
@@ -425,7 +430,7 @@ func (p *Plugin) handleGetInvitation(w http.ResponseWriter, r *http.Request) {
 		inv.OrganizationSlug, _ = orgRec["slug"].(string)
 	}
 
-	writeJSON(w, http.StatusOK, inv)
+	httputil.WriteJSON(w, http.StatusOK, inv)
 }
 
 // --- GET /organization/list-invitations ---
@@ -444,14 +449,14 @@ func (p *Plugin) handleListInvitations(w http.ResponseWriter, r *http.Request) {
 		orgID = getActiveOrgID(sessRaw)
 	}
 	if orgID == "" {
-		writeError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
+		httputil.WriteError(w, ErrOrgNotFound.Status, ErrOrgNotFound.Code, ErrOrgNotFound.Message)
 		return
 	}
 
 	// Check membership.
 	memberRec, err := p.findMemberByUserAndOrg(ctx, userID, orgID)
 	if err != nil || memberRec == nil {
-		writeError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
+		httputil.WriteError(w, ErrUserNotMember.Status, ErrUserNotMember.Code, ErrUserNotMember.Message)
 		return
 	}
 
@@ -467,7 +472,7 @@ func (p *Plugin) handleListInvitations(w http.ResponseWriter, r *http.Request) {
 		invitations = []*Invitation{}
 	}
 
-	writeJSON(w, http.StatusOK, invitations)
+	httputil.WriteJSON(w, http.StatusOK, invitations)
 }
 
 // --- GET /organization/list-user-invitations ---
@@ -484,7 +489,7 @@ func (p *Plugin) handleListUserInvitations(w http.ResponseWriter, r *http.Reques
 	// Email is always derived from authenticated user to prevent invitation enumeration.
 	email, err := p.getUserEmail(ctx, userID)
 	if err != nil || email == "" {
-		writeJSON(w, http.StatusOK, []*Invitation{})
+		httputil.WriteJSON(w, http.StatusOK, []*Invitation{})
 		return
 	}
 
@@ -514,5 +519,5 @@ func (p *Plugin) handleListUserInvitations(w http.ResponseWriter, r *http.Reques
 		invitations = []*Invitation{}
 	}
 
-	writeJSON(w, http.StatusOK, invitations)
+	httputil.WriteJSON(w, http.StatusOK, invitations)
 }

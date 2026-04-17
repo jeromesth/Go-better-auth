@@ -7,13 +7,6 @@ import (
 	"github.com/jeromesth/go-better-auth/models"
 )
 
-// AuthContext holds the full runtime context for the auth system,
-// including the parsed options, internal adapter, and helper references.
-type AuthContext struct {
-	Options         *BetterAuthOptions
-	InternalAdapter *InternalAdapter
-}
-
 // RequestContext carries per-request data attached to context.Context.
 type RequestContext struct {
 	User    *models.User

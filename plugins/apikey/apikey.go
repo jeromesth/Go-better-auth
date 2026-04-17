@@ -3,15 +3,16 @@
 package apikey
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
 
 	betterauth "github.com/jeromesth/go-better-auth"
+	"github.com/jeromesth/go-better-auth/internal/httputil"
 	"github.com/jeromesth/go-better-auth/plugin"
 	"github.com/jeromesth/go-better-auth/session"
 )
@@ -44,10 +45,16 @@ func New(opts Options) *Plugin {
 	return &Plugin{opts: opts}
 }
 
+// ID returns the unique identifier for this plugin.
 func (p *Plugin) ID() string { return "apikey" }
 
+// SetAuth injects the Auth instance so the plugin can access session and storage.
 func (p *Plugin) SetAuth(auth any) {
-	p.auth = auth.(*betterauth.Auth)
+	a, ok := auth.(*betterauth.Auth)
+	if !ok {
+		return
+	}
+	p.auth = a
 	p.repo = newRepository(p.auth)
 }
 
@@ -91,7 +98,7 @@ func (p *Plugin) handleCreate(w http.ResponseWriter, r *http.Request) {
 		Name string `json:"name"`
 	}
 	if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&req)
+		_ = httputil.DecodeJSON(r, &req)
 	}
 	if req.Name == "" {
 		req.Name = "API Key"
@@ -99,7 +106,7 @@ func (p *Plugin) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	rawKey, err := generateKey(p.opts.KeyLength)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to generate key")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to generate key")
 		return
 	}
 	fullKey := p.opts.Prefix + rawKey
@@ -113,18 +120,18 @@ func (p *Plugin) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	rec, err := p.repo.create(r.Context(), userID, req.Name, p.opts.Prefix, keyHash, expiresAt)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to store key")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to store key")
 		return
 	}
 
 	// Return the full plaintext key — only time it's visible.
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id":         rec["id"],
-		"name":       rec["name"],
-		"prefix":     rec["prefix"],
-		"key":        fullKey,
-		"expires_at": rec["expires_at"],
-		"created_at": rec["created_at"],
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		"id":        rec["id"],
+		"name":      rec["name"],
+		"prefix":    rec["prefix"],
+		"key":       fullKey,
+		"expiresAt": rec["expires_at"],
+		"createdAt": rec["created_at"],
 	})
 }
 
@@ -137,7 +144,7 @@ func (p *Plugin) handleList(w http.ResponseWriter, r *http.Request) {
 
 	recs, err := p.repo.listByUser(r.Context(), userID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list keys")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list keys")
 		return
 	}
 
@@ -145,7 +152,7 @@ func (p *Plugin) handleList(w http.ResponseWriter, r *http.Request) {
 	for _, rec := range recs {
 		keys = append(keys, sanitize(rec))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"keys": keys})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"keys": keys})
 }
 
 // handleDelete revokes a key by ID.
@@ -168,22 +175,22 @@ func (p *Plugin) handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "MISSING_ID", "Key ID is required")
+		httputil.WriteError(w, http.StatusBadRequest, "MISSING_ID", "Key ID is required")
 		return
 	}
 
 	if err := p.repo.deleteByID(r.Context(), id, userID); err != nil {
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to revoke key")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to revoke key")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
 // handleVerify validates an API key from the Authorization header.
 func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 	authHeader := r.Header.Get("Authorization")
 	if !strings.HasPrefix(authHeader, "Bearer ") {
-		writeError(w, http.StatusUnauthorized, "MISSING_KEY", "Authorization: Bearer <key> required")
+		httputil.WriteError(w, http.StatusUnauthorized, "MISSING_KEY", "Authorization: Bearer <key> required")
 		return
 	}
 	fullKey := strings.TrimPrefix(authHeader, "Bearer ")
@@ -191,22 +198,23 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 	keyHash := hashKey(fullKey)
 	rec, err := p.repo.findByHash(r.Context(), keyHash)
 	if err != nil || rec == nil {
-		writeError(w, http.StatusUnauthorized, "INVALID_KEY", "Invalid API key")
+		httputil.WriteError(w, http.StatusUnauthorized, "INVALID_KEY", "Invalid API key")
 		return
 	}
 
 	// Check expiry if set.
 	if exp, ok := rec["expires_at"].(time.Time); ok && time.Now().UTC().After(exp) {
-		writeError(w, http.StatusUnauthorized, "KEY_EXPIRED", "API key has expired")
+		httputil.WriteError(w, http.StatusUnauthorized, "KEY_EXPIRED", "API key has expired")
 		return
 	}
 
-	go p.repo.touchLastUsed(r.Context(), rec["id"].(string))
+	// Detach from the request context so this survives response completion.
+	go p.repo.touchLastUsed(context.WithoutCancel(r.Context()), rec["id"].(string))
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"valid":   true,
-		"user_id": rec["user_id"],
-		"name":    rec["name"],
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		"valid":  true,
+		"userId": rec["user_id"],
+		"name":   rec["name"],
 	})
 }
 
@@ -215,12 +223,12 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 func (p *Plugin) requireSession(w http.ResponseWriter, r *http.Request) (string, bool) {
 	token := session.GetSessionToken(r)
 	if token == "" {
-		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
 		return "", false
 	}
 	sess, err := p.auth.SessionManager().FindByToken(r.Context(), token)
 	if err != nil || sess == nil || session.IsExpired(sess) {
-		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
 		return "", false
 	}
 	return sess.UserID, true
@@ -249,25 +257,26 @@ func hashKey(key string) string {
 	return hex.EncodeToString(h[:])
 }
 
-// sanitize strips sensitive fields before returning to the client.
+// sanitize strips sensitive fields and normalises storage keys to camelCase
+// before returning a record to the client.
 func sanitize(rec map[string]any) map[string]any {
-	out := make(map[string]any, len(rec))
-	for k, v := range rec {
-		out[k] = v
+	// Map of storage key → camelCase response key.
+	keyMap := map[string]string{
+		"id":           "id",
+		"name":         "name",
+		"prefix":       "prefix",
+		"user_id":      "userId",
+		"expires_at":   "expiresAt",
+		"last_used_at": "lastUsedAt",
+		"created_at":   "createdAt",
+		"updated_at":   "updatedAt",
 	}
-	delete(out, "key_hash")
-	delete(out, "key")
+	// key_hash and key are intentionally omitted (sensitive).
+	out := make(map[string]any, len(rec))
+	for storageKey, responseKey := range keyMap {
+		if v, ok := rec[storageKey]; ok {
+			out[responseKey] = v
+		}
+	}
 	return out
-}
-
-func writeError(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": message})
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
 }

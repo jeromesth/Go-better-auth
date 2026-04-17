@@ -3,6 +3,7 @@ package betterauth
 import (
 	"net/http"
 
+	"github.com/jeromesth/go-better-auth/internal/httputil"
 	"github.com/jeromesth/go-better-auth/session"
 )
 
@@ -19,13 +20,13 @@ func (a *Auth) handleSignOut(w http.ResponseWriter, r *http.Request) {
 	}
 
 	session.ClearSessionCookie(w)
-	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+	httputil.WriteJSON(w, http.StatusOK, map[string]bool{"success": true})
 }
 
 func (a *Auth) handleGetSession(w http.ResponseWriter, r *http.Request) {
 	token := session.GetSessionToken(r)
 	if token == "" {
-		writeJSON(w, http.StatusOK, nil)
+		httputil.WriteJSON(w, http.StatusOK, nil)
 		return
 	}
 
@@ -37,7 +38,7 @@ func (a *Auth) handleGetSession(w http.ResponseWriter, r *http.Request) {
 	}
 	if sess == nil || session.IsExpired(sess) {
 		session.ClearSessionCookie(w)
-		writeJSON(w, http.StatusOK, nil)
+		httputil.WriteJSON(w, http.StatusOK, nil)
 		return
 	}
 
@@ -53,7 +54,7 @@ func (a *Auth) handleGetSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"user":    user,
 		"session": sess,
 	})
@@ -79,7 +80,7 @@ func (a *Auth) handleListSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"sessions": sessions})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"sessions": sessions})
 }
 
 func (a *Auth) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
@@ -99,7 +100,8 @@ func (a *Auth) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		SessionID string `json:"sessionId"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -114,7 +116,7 @@ func (a *Auth) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+	httputil.WriteJSON(w, http.StatusOK, map[string]bool{"success": true})
 }
 
 func (a *Auth) handleRevokeOtherSessions(w http.ResponseWriter, r *http.Request) {
@@ -136,5 +138,5 @@ func (a *Auth) handleRevokeOtherSessions(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+	httputil.WriteJSON(w, http.StatusOK, map[string]bool{"success": true})
 }

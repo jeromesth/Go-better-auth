@@ -3,7 +3,6 @@ package magiclink
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	betterauth "github.com/jeromesth/go-better-auth"
 	"github.com/jeromesth/go-better-auth/crypto"
 	"github.com/jeromesth/go-better-auth/internal"
+	"github.com/jeromesth/go-better-auth/internal/httputil"
 	"github.com/jeromesth/go-better-auth/plugin"
 	"github.com/jeromesth/go-better-auth/session"
 )
@@ -45,7 +45,11 @@ func New(opts Options) *Plugin {
 func (p *Plugin) ID() string { return "magiclink" }
 
 func (p *Plugin) SetAuth(auth any) {
-	p.auth = auth.(*betterauth.Auth)
+	a, ok := auth.(*betterauth.Auth)
+	if !ok {
+		return
+	}
+	p.auth = a
 }
 
 // Endpoints registers /magic-link/send and /magic-link/verify.
@@ -62,16 +66,16 @@ func (p *Plugin) handleSend(w http.ResponseWriter, r *http.Request) {
 		Email string `json:"email"`
 	}
 	if r.Body == nil {
-		writeMagicError(w, http.StatusBadRequest, "INVALID_REQUEST", "Request body required")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_REQUEST", "Request body required")
 		return
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeMagicError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
 		return
 	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 	if req.Email == "" {
-		writeMagicError(w, http.StatusBadRequest, "MISSING_EMAIL", "email is required")
+		httputil.WriteError(w, http.StatusBadRequest, "MISSING_EMAIL", "email is required")
 		return
 	}
 
@@ -80,23 +84,23 @@ func (p *Plugin) handleSend(w http.ResponseWriter, r *http.Request) {
 
 	user, err := ia.FindUserByEmail(ctx, req.Email)
 	if err != nil {
-		writeMagicError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
 		return
 	}
 	// Don't reveal whether the email exists — silently succeed.
 	if user == nil {
-		writeMagicJSON(w, http.StatusOK, map[string]bool{"success": true})
+		httputil.WriteJSON(w, http.StatusOK, map[string]bool{"success": true})
 		return
 	}
 
 	token, err := crypto.GenerateVerificationToken()
 	if err != nil {
-		writeMagicError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to generate token")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to generate token")
 		return
 	}
 
 	if _, err = ia.CreateVerification(ctx, identifierPrefix+req.Email, token, p.opts.TokenExpiry); err != nil {
-		writeMagicError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to store token")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to store token")
 		return
 	}
 
@@ -108,14 +112,14 @@ func (p *Plugin) handleSend(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeMagicJSON(w, http.StatusOK, map[string]bool{"success": true})
+	httputil.WriteJSON(w, http.StatusOK, map[string]bool{"success": true})
 }
 
 // handleVerify validates the token and creates a session.
 func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
 	if token == "" {
-		writeMagicError(w, http.StatusUnauthorized, "MISSING_TOKEN", "token query parameter required")
+		httputil.WriteError(w, http.StatusUnauthorized, "MISSING_TOKEN", "token query parameter required")
 		return
 	}
 
@@ -124,23 +128,23 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 
 	verif, err := ia.FindVerificationByValue(ctx, token)
 	if err != nil || verif == nil {
-		writeMagicError(w, http.StatusUnauthorized, "INVALID_TOKEN", "Invalid or expired magic link")
+		httputil.WriteError(w, http.StatusUnauthorized, "INVALID_TOKEN", "Invalid or expired magic link")
 		return
 	}
 	if time.Now().After(verif.ExpiresAt) {
 		_ = ia.DeleteVerification(ctx, verif.ID)
-		writeMagicError(w, http.StatusUnauthorized, "TOKEN_EXPIRED", "Magic link has expired")
+		httputil.WriteError(w, http.StatusUnauthorized, "TOKEN_EXPIRED", "Magic link has expired")
 		return
 	}
 	if !strings.HasPrefix(verif.Identifier, identifierPrefix) {
-		writeMagicError(w, http.StatusUnauthorized, "INVALID_TOKEN", "Invalid magic link")
+		httputil.WriteError(w, http.StatusUnauthorized, "INVALID_TOKEN", "Invalid magic link")
 		return
 	}
 
 	email := verif.Identifier[len(identifierPrefix):]
 	user, err := ia.FindUserByEmail(ctx, email)
 	if err != nil || user == nil {
-		writeMagicError(w, http.StatusUnauthorized, "USER_NOT_FOUND", "User not found")
+		httputil.WriteError(w, http.StatusUnauthorized, "USER_NOT_FOUND", "User not found")
 		return
 	}
 
@@ -150,7 +154,7 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 	// Run session create hooks.
 	if err := p.auth.RunSessionCreateHooks(w, r, user.ID); err != nil {
 		if !errors.Is(err, plugin.ErrHandled) {
-			writeMagicError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+			httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
 		}
 		return
 	}
@@ -159,12 +163,12 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 	ua := r.UserAgent()
 	sess, err := p.auth.SessionManager().Create(ctx, user.ID, ip, ua)
 	if err != nil {
-		writeMagicError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create session")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create session")
 		return
 	}
 
 	session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, p.auth.IsSecure())
-	writeMagicJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"user":    user,
 		"session": sess,
 	})
@@ -183,16 +187,4 @@ func (p *Plugin) withMethod(method string, h http.HandlerFunc) http.HandlerFunc 
 		}
 		h(w, r)
 	}
-}
-
-func writeMagicError(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": message})
-}
-
-func writeMagicJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
 }

@@ -14,6 +14,7 @@ import (
 	betterauth "github.com/jeromesth/go-better-auth"
 	"github.com/jeromesth/go-better-auth/adapter"
 	"github.com/jeromesth/go-better-auth/internal"
+	"github.com/jeromesth/go-better-auth/internal/httputil"
 	"github.com/jeromesth/go-better-auth/plugin"
 	"github.com/jeromesth/go-better-auth/session"
 )
@@ -116,7 +117,11 @@ func New(opts *Options) *Plugin {
 func (p *Plugin) ID() string { return "organization" }
 
 func (p *Plugin) SetAuth(auth any) {
-	p.auth = auth.(*betterauth.Auth)
+	a, ok := auth.(*betterauth.Auth)
+	if !ok {
+		return
+	}
+	p.auth = a
 	p.repo = newRepository(p.auth)
 }
 
@@ -205,14 +210,14 @@ func (p *Plugin) withMethod(method string, h http.HandlerFunc) http.HandlerFunc 
 func (p *Plugin) getAuthenticatedUser(w http.ResponseWriter, r *http.Request) (userID string, sessRaw map[string]any, ok bool) {
 	token := session.GetSessionToken(r)
 	if token == "" {
-		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
 		return "", nil, false
 	}
 
 	ctx := r.Context()
 	sess, err := p.auth.SessionManager().FindByToken(ctx, token)
 	if err != nil || sess == nil || session.IsExpired(sess) {
-		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
 		return "", nil, false
 	}
 
@@ -353,28 +358,6 @@ func recordToInvitation(r map[string]any) *Invitation {
 	return inv
 }
 
-// --- JSON helpers ---
-
-func writeError(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": message})
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
-	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		writeError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
-		return false
-	}
-	return true
-}
-
 // parseRoles converts a role value (string or []string) to a comma-separated string.
 func parseRoles(v any) string {
 	switch val := v.(type) {
@@ -396,22 +379,11 @@ func parseRoles(v any) string {
 }
 
 func splitRoles(s string) []string {
-	if s == "" {
-		return nil
-	}
 	var roles []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == ',' {
-			r := s[start:i]
-			if r != "" {
-				roles = append(roles, r)
-			}
-			start = i + 1
+	for _, r := range strings.Split(s, ",") {
+		if r = strings.TrimSpace(r); r != "" {
+			roles = append(roles, r)
 		}
-	}
-	if start < len(s) {
-		roles = append(roles, s[start:])
 	}
 	return roles
 }
