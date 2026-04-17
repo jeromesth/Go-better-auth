@@ -77,14 +77,14 @@ func (p *Plugin) Endpoints() []plugin.Endpoint {
 func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-		writeJWTError(w, http.StatusUnauthorized, "MISSING_TOKEN", "Authorization header required")
+		httputil.WriteError(w, http.StatusUnauthorized, "MISSING_TOKEN", "Authorization header required")
 		return
 	}
 	raw := strings.TrimPrefix(authHeader, "Bearer ")
 
 	claims, err := p.verify(raw)
 	if err != nil {
-		writeJWTError(w, http.StatusUnauthorized, "INVALID_TOKEN", fmt.Sprintf("token invalid: %v", err))
+		httputil.WriteError(w, http.StatusUnauthorized, "INVALID_TOKEN", fmt.Sprintf("token invalid: %v", err))
 		return
 	}
 
@@ -123,8 +123,4 @@ func (p *Plugin) verify(raw string) (map[string]any, error) {
 		return nil, fmt.Errorf("invalid token claims")
 	}
 	return map[string]any(claims), nil
-}
-
-func writeJWTError(w http.ResponseWriter, status int, code, message string) {
-	httputil.WriteError(w, status, code, message)
 }
