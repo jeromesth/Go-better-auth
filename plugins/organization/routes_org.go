@@ -20,7 +20,7 @@ func (p *Plugin) handleCreateOrganization(w http.ResponseWriter, r *http.Request
 		Metadata any    `json:"metadata,omitempty"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -124,7 +124,7 @@ func (p *Plugin) handleUpdateOrganization(w http.ResponseWriter, r *http.Request
 		} `json:"data"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -212,7 +212,7 @@ func (p *Plugin) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 		OrganizationID string `json:"organizationId"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -337,7 +337,7 @@ func (p *Plugin) handleSetActiveOrganization(w http.ResponseWriter, r *http.Requ
 		OrganizationSlug string `json:"organizationSlug,omitempty"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 

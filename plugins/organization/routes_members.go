@@ -19,7 +19,7 @@ func (p *Plugin) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
 		OrganizationID string `json:"organizationId,omitempty"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -110,7 +110,7 @@ func (p *Plugin) handleUpdateMemberRole(w http.ResponseWriter, r *http.Request) 
 		OrganizationID string `json:"organizationId,omitempty"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -254,7 +254,7 @@ func (p *Plugin) handleLeaveOrganization(w http.ResponseWriter, r *http.Request)
 		OrganizationID string `json:"organizationId,omitempty"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -309,7 +309,7 @@ func (p *Plugin) handleHasPermission(w http.ResponseWriter, r *http.Request) {
 		Permissions    map[string][]string `json:"permissions"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -397,7 +397,7 @@ func (p *Plugin) handleAddMember(w http.ResponseWriter, r *http.Request) {
 		Role           any    `json:"role"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 

@@ -31,7 +31,7 @@ func (a *Auth) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		RevokeOtherSessions bool   `json:"revokeOtherSessions"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -110,7 +110,7 @@ func (a *Auth) handleRequestPasswordReset(w http.ResponseWriter, r *http.Request
 		RedirectURI string `json:"redirectURI"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
@@ -169,7 +169,7 @@ func (a *Auth) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"newPassword"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 

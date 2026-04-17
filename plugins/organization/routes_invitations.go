@@ -20,7 +20,7 @@ func (p *Plugin) handleInviteMember(w http.ResponseWriter, r *http.Request) {
 		Resend         bool   `json:"resend,omitempty"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -182,7 +182,7 @@ func (p *Plugin) handleAcceptInvitation(w http.ResponseWriter, r *http.Request) 
 		InvitationID string `json:"invitationId"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -283,7 +283,7 @@ func (p *Plugin) handleRejectInvitation(w http.ResponseWriter, r *http.Request) 
 		InvitationID string `json:"invitationId"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 
@@ -332,7 +332,7 @@ func (p *Plugin) handleCancelInvitation(w http.ResponseWriter, r *http.Request) 
 		InvitationID string `json:"invitationId"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 

@@ -19,7 +19,7 @@ func (a *Auth) handleSendVerificationEmail(w http.ResponseWriter, r *http.Reques
 		CallbackURL string `json:"callbackURL"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))

@@ -183,7 +183,7 @@ func (a *Auth) handleLinkSocial(w http.ResponseWriter, r *http.Request) {
 		CallbackURL string `json:"callbackURL"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 

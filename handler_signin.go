@@ -20,7 +20,7 @@ type signInEmailRequest struct {
 func (a *Auth) handleSignInEmail(w http.ResponseWriter, r *http.Request) {
 	var req signInEmailRequest
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 

@@ -189,7 +189,7 @@ func (p *Plugin) handleEnable(w http.ResponseWriter, r *http.Request) {
 		Code string `json:"code"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 	ctx := r.Context()
@@ -222,7 +222,7 @@ func (p *Plugin) handleDisable(w http.ResponseWriter, r *http.Request) {
 		Code string `json:"code"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 	ctx := r.Context()
@@ -273,7 +273,7 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 		Code           string `json:"code"`
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 		return
 	}
 	if req.ChallengeToken == "" || req.Code == "" {
