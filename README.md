@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  The most comprehensive authentication library for Go
+  A Go learning project — porting better-auth from TypeScript to idiomatic Go
 </p>
 
 <p align="center">
@@ -16,9 +16,12 @@
   <a href="https://pkg.go.dev/github.com/jeromesth/go-better-auth"><img src="https://pkg.go.dev/badge/github.com/jeromesth/go-better-auth.svg" alt="Go Reference"></a>
   <a href="https://github.com/jeromesth/Go-better-auth/blob/main/LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License"></a>
   <a href="https://github.com/jeromesth/Go-better-auth/stargazers"><img src="https://img.shields.io/github/stars/jeromesth/Go-better-auth?style=flat-square" alt="GitHub Stars"></a>
+  <a href="https://github.com/jeromesth/Go-better-auth/actions/workflows/ci.yml"><img src="https://github.com/jeromesth/Go-better-auth/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
 ---
+
+> **Portfolio / Learning Project** — I built this to learn idiomatic Go by porting the TypeScript [better-auth](https://github.com/better-auth/better-auth) library. The core authentication flows work and are tested, but this is not a production-ready library. I'm actively developing it as a showcase of my Go skills.
 
 ## About
 
@@ -86,39 +89,44 @@ func main() {
 }
 ```
 
+## Examples
+
+The [`examples/`](./examples/) directory contains a full working example with Docker Compose, PostgreSQL, and curl commands demonstrating every major auth flow.
+
+```bash
+cd examples && docker-compose up
+```
+
+See [`examples/README.md`](./examples/README.md) for the full walkthrough.
+
 ## Project Structure
 
 ```
 go-better-auth/
-├── auth.go             # Core authentication library (package betterauth)
-├── adapter/            # Database adapter interface + implementations
-│   ├── memory/         # In-memory adapter (testing)
-│   └── sqlx/           # sqlx adapter (PostgreSQL, MySQL, SQLite)
-├── framework/          # Framework router adapters
-│   ├── chi/            # Chi adapter
-│   ├── echo/           # Echo adapter
-│   └── gin/            # Gin adapter
-├── plugins/            # Plugin implementations
-│   ├── admin/          # Admin plugin (RBAC, user management)
-│   ├── apikey/         # API Key plugin
-│   ├── emailotp/       # Email OTP plugin
-│   ├── jwt/            # JWT plugin
-│   ├── magiclink/      # Magic Link plugin
-│   ├── organization/   # Organization/multi-tenancy plugin
-│   ├── totp/           # TOTP / 2FA plugin
-│   └── username/       # Username authentication plugin
-├── social/             # OAuth provider implementations
-├── plugin/             # Plugin interface definitions
-├── session/            # Session management
-├── crypto/             # Cryptographic utilities
-├── models/             # Shared data models
-├── internal/           # Private utilities
-├── testutil/           # Shared test helpers
-├── e2e/                # End-to-end tests
-├── examples/           # Example applications
-├── docs/               # Documentation
-├── go.work             # Go workspace configuration
-└── Makefile            # Build, test, lint commands
+├── auth.go                    # Main entry point — New() and Auth type
+├── handler_*.go               # HTTP handlers (sign-in, sign-up, session, password, oauth)
+├── plugin/                    # Plugin interface + ErrHandled sentinel
+├── plugins/                   # Built-in plugin implementations
+│   ├── admin/                 # Admin plugin (RBAC, user management)
+│   ├── anonymous/             # Anonymous session plugin
+│   ├── apikey/                # API Key plugin
+│   ├── emailotp/              # Email OTP plugin
+│   ├── jwt/                   # JWT plugin
+│   ├── magiclink/             # Magic Link plugin
+│   ├── organization/          # Organization / multi-tenancy plugin
+│   ├── totp/                  # TOTP / 2FA plugin
+│   └── username/              # Username auth plugin
+├── adapter/                   # Adapter interface + in-memory implementation
+├── crypto/                    # Password hashing (scrypt)
+├── internal/                  # Unexported helpers (cookie, id, ip, url)
+├── oauth/                     # OAuth flow helpers
+├── ratelimit/                 # Rate limiting middleware
+├── session/                   # Session management
+├── social/                    # OAuth provider implementations
+├── framework/                 # Framework adapters (chi, gin, echo, fiber)
+├── testutil/                  # Shared test utilities (separate module)
+├── e2e/                       # Integration tests (separate module)
+└── examples/                  # Working Docker Compose example
 ```
 
 ## OAuth Providers
