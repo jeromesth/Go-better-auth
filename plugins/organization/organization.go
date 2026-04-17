@@ -379,22 +379,11 @@ func parseRoles(v any) string {
 }
 
 func splitRoles(s string) []string {
-	if s == "" {
-		return nil
-	}
 	var roles []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == ',' {
-			r := s[start:i]
-			if r != "" {
-				roles = append(roles, r)
-			}
-			start = i + 1
+	for _, r := range strings.Split(s, ",") {
+		if r = strings.TrimSpace(r); r != "" {
+			roles = append(roles, r)
 		}
-	}
-	if start < len(s) {
-		roles = append(roles, s[start:])
 	}
 	return roles
 }
