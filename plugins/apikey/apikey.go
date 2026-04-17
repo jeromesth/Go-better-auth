@@ -126,12 +126,12 @@ func (p *Plugin) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	// Return the full plaintext key — only time it's visible.
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{
-		"id":         rec["id"],
-		"name":       rec["name"],
-		"prefix":     rec["prefix"],
-		"key":        fullKey,
-		"expires_at": rec["expires_at"],
-		"created_at": rec["created_at"],
+		"id":        rec["id"],
+		"name":      rec["name"],
+		"prefix":    rec["prefix"],
+		"key":       fullKey,
+		"expiresAt": rec["expires_at"],
+		"createdAt": rec["created_at"],
 	})
 }
 
@@ -212,9 +212,9 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 	go p.repo.touchLastUsed(context.WithoutCancel(r.Context()), rec["id"].(string))
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{
-		"valid":   true,
-		"user_id": rec["user_id"],
-		"name":    rec["name"],
+		"valid":  true,
+		"userId": rec["user_id"],
+		"name":   rec["name"],
 	})
 }
 
@@ -257,13 +257,26 @@ func hashKey(key string) string {
 	return hex.EncodeToString(h[:])
 }
 
-// sanitize strips sensitive fields before returning to the client.
+// sanitize strips sensitive fields and normalises storage keys to camelCase
+// before returning a record to the client.
 func sanitize(rec map[string]any) map[string]any {
-	out := make(map[string]any, len(rec))
-	for k, v := range rec {
-		out[k] = v
+	// Map of storage key → camelCase response key.
+	keyMap := map[string]string{
+		"id":           "id",
+		"name":         "name",
+		"prefix":       "prefix",
+		"user_id":      "userId",
+		"expires_at":   "expiresAt",
+		"last_used_at": "lastUsedAt",
+		"created_at":   "createdAt",
+		"updated_at":   "updatedAt",
 	}
-	delete(out, "key_hash")
-	delete(out, "key")
+	// key_hash and key are intentionally omitted (sensitive).
+	out := make(map[string]any, len(rec))
+	for storageKey, responseKey := range keyMap {
+		if v, ok := rec[storageKey]; ok {
+			out[responseKey] = v
+		}
+	}
 	return out
 }
