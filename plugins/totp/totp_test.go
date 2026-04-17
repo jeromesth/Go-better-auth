@@ -17,6 +17,7 @@ import (
 // --- TOTP math tests ---
 
 func TestGenerateTOTP(t *testing.T) {
+	t.Parallel()
 	// RFC 6238 test vector: secret = "12345678901234567890" (ASCII), T=59s → last 6 digits of 94287082 = 287082
 	secret := "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ" // base32 of "12345678901234567890"
 	ts := time.Unix(59, 0).UTC()
@@ -30,6 +31,7 @@ func TestGenerateTOTP(t *testing.T) {
 }
 
 func TestVerifyTOTP(t *testing.T) {
+	t.Parallel()
 	secret := "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
 	ts := time.Unix(59, 0).UTC()
 	code, _ := totp.GenerateTOTP(secret, ts)
@@ -42,6 +44,7 @@ func TestVerifyTOTP(t *testing.T) {
 }
 
 func TestVerifyTOTPTolerance(t *testing.T) {
+	t.Parallel()
 	secret := "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
 	// Generate code in window counter=1 (seconds 30-59)
 	ts := time.Unix(31, 0).UTC()
@@ -54,6 +57,7 @@ func TestVerifyTOTPTolerance(t *testing.T) {
 }
 
 func TestGenerateSecret(t *testing.T) {
+	t.Parallel()
 	s1, err := totp.GenerateSecret()
 	if err != nil {
 		t.Fatal(err)
@@ -148,6 +152,7 @@ func signIn(t *testing.T, h http.Handler, email, password string) (*http.Respons
 // --- Integration tests ---
 
 func TestTOTPStatusNotConfigured(t *testing.T) {
+	t.Parallel()
 	_, h := newTestAuth(t, totp.New(nil))
 	cookies := signUp(t, h, "user@example.com", "password123")
 
@@ -162,6 +167,7 @@ func TestTOTPStatusNotConfigured(t *testing.T) {
 }
 
 func TestTOTPGenerateAndEnable(t *testing.T) {
+	t.Parallel()
 	_, h := newTestAuth(t, totp.New(nil))
 	cookies := signUp(t, h, "user@example.com", "password123")
 
@@ -203,6 +209,7 @@ func TestTOTPGenerateAndEnable(t *testing.T) {
 }
 
 func TestSignInRequiresTOTP(t *testing.T) {
+	t.Parallel()
 	_, h := newTestAuth(t, totp.New(nil))
 	cookies := signUp(t, h, "user@example.com", "password123")
 
@@ -232,6 +239,7 @@ func TestSignInRequiresTOTP(t *testing.T) {
 }
 
 func TestTOTPVerifyFlow(t *testing.T) {
+	t.Parallel()
 	_, h := newTestAuth(t, totp.New(nil))
 	cookies := signUp(t, h, "user@example.com", "password123")
 
@@ -283,6 +291,7 @@ func TestTOTPVerifyFlow(t *testing.T) {
 }
 
 func TestTOTPVerifyInvalidCode(t *testing.T) {
+	t.Parallel()
 	_, h := newTestAuth(t, totp.New(nil))
 	cookies := signUp(t, h, "user@example.com", "password123")
 
@@ -315,6 +324,7 @@ func TestTOTPVerifyInvalidCode(t *testing.T) {
 }
 
 func TestTOTPVerifyExpiredChallenge(t *testing.T) {
+	t.Parallel()
 	// Use a very short challenge expiry
 	_, h := newTestAuth(t, totp.New(&totp.Options{ChallengeExpiresIn: -1}))
 	cookies := signUp(t, h, "user@example.com", "password123")
@@ -349,6 +359,7 @@ func TestTOTPVerifyExpiredChallenge(t *testing.T) {
 }
 
 func TestTOTPDisable(t *testing.T) {
+	t.Parallel()
 	_, h := newTestAuth(t, totp.New(nil))
 	cookies := signUp(t, h, "user@example.com", "password123")
 
@@ -382,6 +393,7 @@ func TestTOTPDisable(t *testing.T) {
 }
 
 func TestTOTPGenerateRequiresAuth(t *testing.T) {
+	t.Parallel()
 	_, h := newTestAuth(t, totp.New(nil))
 
 	rr := postJSON(t, h, "/api/auth/totp/generate", nil, nil)
@@ -391,6 +403,7 @@ func TestTOTPGenerateRequiresAuth(t *testing.T) {
 }
 
 func TestTOTPEnableWithoutGenerate(t *testing.T) {
+	t.Parallel()
 	_, h := newTestAuth(t, totp.New(nil))
 	cookies := signUp(t, h, "user@example.com", "password123")
 

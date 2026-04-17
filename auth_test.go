@@ -58,6 +58,7 @@ func getJSON(t *testing.T, handler http.Handler, path string, cookies []*http.Co
 }
 
 func TestSignUpAndSignIn(t *testing.T) {
+	t.Parallel()
 	auth := newTestAuth()
 	h := auth.Handler()
 
@@ -114,6 +115,7 @@ func TestSignUpAndSignIn(t *testing.T) {
 }
 
 func TestSignUpDuplicateEmail(t *testing.T) {
+	t.Parallel()
 	auth := newTestAuth()
 	h := auth.Handler()
 
@@ -132,6 +134,7 @@ func TestSignUpDuplicateEmail(t *testing.T) {
 }
 
 func TestSignInWrongPassword(t *testing.T) {
+	t.Parallel()
 	auth := newTestAuth()
 	h := auth.Handler()
 
@@ -152,6 +155,7 @@ func TestSignInWrongPassword(t *testing.T) {
 }
 
 func TestPasswordTooShort(t *testing.T) {
+	t.Parallel()
 	auth := newTestAuth()
 	h := auth.Handler()
 
@@ -178,6 +182,7 @@ func signUp(t *testing.T, auth *betterauth.Auth, email, password string) *httpte
 }
 
 func TestUpdateUser(t *testing.T) {
+	t.Parallel()
 	auth := newTestAuth()
 	h := auth.Handler()
 
@@ -205,6 +210,7 @@ func TestUpdateUser(t *testing.T) {
 }
 
 func TestRequestPasswordReset_UnknownEmail_Returns200(t *testing.T) {
+	t.Parallel()
 	// Auth libraries must not leak whether an email is registered.
 	a := newTestAuth()
 	h := a.Handler()
@@ -216,6 +222,7 @@ func TestRequestPasswordReset_UnknownEmail_Returns200(t *testing.T) {
 }
 
 func TestRequestPasswordReset_KnownEmail_Returns200(t *testing.T) {
+	t.Parallel()
 	a := newTestAuth()
 	signUp(t, a, "user@example.com", "password123")
 	h := a.Handler()
@@ -227,6 +234,7 @@ func TestRequestPasswordReset_KnownEmail_Returns200(t *testing.T) {
 }
 
 func TestResetPassword_InvalidToken_Returns400(t *testing.T) {
+	t.Parallel()
 	a := newTestAuth()
 	h := a.Handler()
 	w := postJSON(t, h, "/api/auth/reset-password",
@@ -237,6 +245,7 @@ func TestResetPassword_InvalidToken_Returns400(t *testing.T) {
 }
 
 func TestResetPassword_PasswordTooShort_Returns400(t *testing.T) {
+	t.Parallel()
 	a := newTestAuth()
 	signUp(t, a, "user@example.com", "password123")
 	h := a.Handler()
@@ -257,6 +266,7 @@ func TestResetPassword_PasswordTooShort_Returns400(t *testing.T) {
 }
 
 func TestSendVerificationEmail_UnknownEmail_Returns200(t *testing.T) {
+	t.Parallel()
 	// Auth libraries must not reveal whether an email is registered.
 	a := newTestAuth()
 	h := a.Handler()
@@ -268,6 +278,7 @@ func TestSendVerificationEmail_UnknownEmail_Returns200(t *testing.T) {
 }
 
 func TestSendVerificationEmail_KnownEmail_Returns200(t *testing.T) {
+	t.Parallel()
 	a := newTestAuth()
 	signUp(t, a, "known@example.com", "password123")
 	h := a.Handler()
@@ -279,6 +290,7 @@ func TestSendVerificationEmail_KnownEmail_Returns200(t *testing.T) {
 }
 
 func TestVerifyEmail_InvalidToken_Returns400(t *testing.T) {
+	t.Parallel()
 	a := newTestAuth()
 	h := a.Handler()
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/verify-email?token=bogus-token", nil)
@@ -290,6 +302,7 @@ func TestVerifyEmail_InvalidToken_Returns400(t *testing.T) {
 }
 
 func TestVerifyEmail_ValidToken_Returns200(t *testing.T) {
+	t.Parallel()
 	a := newTestAuth()
 	signUp(t, a, "verify@example.com", "password123")
 	h := a.Handler()
@@ -314,6 +327,7 @@ func TestVerifyEmail_ValidToken_Returns200(t *testing.T) {
 }
 
 func TestGetSession_ExpiredSession_ReturnsNull(t *testing.T) {
+	t.Parallel()
 	a := newTestAuth()
 	h := a.Handler()
 

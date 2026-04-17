@@ -88,6 +88,7 @@ func signUp(t *testing.T, h http.Handler) []*http.Cookie {
 }
 
 func TestAPIKeyPlugin_ID(t *testing.T) {
+	t.Parallel()
 	p := apikey.New(apikey.Options{Prefix: "ak_"})
 	if p.ID() != "apikey" {
 		t.Errorf("expected ID=apikey, got %s", p.ID())
@@ -95,6 +96,7 @@ func TestAPIKeyPlugin_ID(t *testing.T) {
 }
 
 func TestAPIKey_CreateAndList(t *testing.T) {
+	t.Parallel()
 	p := apikey.New(apikey.Options{Prefix: "ak_"})
 	_, h := newTestAuth(t, p)
 	cookies := signUp(t, h)
@@ -135,6 +137,7 @@ func TestAPIKey_CreateAndList(t *testing.T) {
 }
 
 func TestAPIKey_Verify(t *testing.T) {
+	t.Parallel()
 	p := apikey.New(apikey.Options{Prefix: "ak_"})
 	_, h := newTestAuth(t, p)
 	cookies := signUp(t, h)
@@ -164,6 +167,7 @@ func TestAPIKey_Verify(t *testing.T) {
 }
 
 func TestAPIKey_VerifyInvalidKey(t *testing.T) {
+	t.Parallel()
 	p := apikey.New(apikey.Options{Prefix: "ak_"})
 	_, h := newTestAuth(t, p)
 
@@ -178,6 +182,7 @@ func TestAPIKey_VerifyInvalidKey(t *testing.T) {
 }
 
 func TestAPIKey_Revoke(t *testing.T) {
+	t.Parallel()
 	p := apikey.New(apikey.Options{Prefix: "ak_"})
 	_, h := newTestAuth(t, p)
 	cookies := signUp(t, h)
@@ -206,6 +211,7 @@ func TestAPIKey_Revoke(t *testing.T) {
 }
 
 func TestAPIKey_RequiresAuth(t *testing.T) {
+	t.Parallel()
 	p := apikey.New(apikey.Options{Prefix: "ak_"})
 	_, h := newTestAuth(t, p)
 
@@ -233,6 +239,7 @@ func TestWithoutCancel_SurvivesParentCancellation(t *testing.T) {
 }
 
 func TestVerifyAPIKey_UpdatesLastUsed(t *testing.T) {
+	t.Parallel()
 	p := apikey.New(apikey.Options{Prefix: "ak_"})
 	auth, h := newTestAuth(t, p)
 	cookies := signUp(t, h)

@@ -60,6 +60,7 @@ func registerUser(t *testing.T, h http.Handler, email string) {
 }
 
 func TestMagicLinkPlugin_ID(t *testing.T) {
+	t.Parallel()
 	p := magiclink.New(magiclink.Options{
 		SendMagicLink: func(_ context.Context, _, _ string) error { return nil },
 		BaseURL:       "http://localhost",
@@ -70,6 +71,7 @@ func TestMagicLinkPlugin_ID(t *testing.T) {
 }
 
 func TestMagicLink_SendAndVerify(t *testing.T) {
+	t.Parallel()
 	var capturedLink string
 	p := magiclink.New(magiclink.Options{
 		SendMagicLink: func(_ context.Context, _, link string) error {
@@ -124,6 +126,7 @@ func TestMagicLink_SendAndVerify(t *testing.T) {
 }
 
 func TestMagicLink_UnknownEmail(t *testing.T) {
+	t.Parallel()
 	called := false
 	p := magiclink.New(magiclink.Options{
 		SendMagicLink: func(_ context.Context, _, _ string) error {
@@ -147,6 +150,7 @@ func TestMagicLink_UnknownEmail(t *testing.T) {
 }
 
 func TestMagicLink_InvalidToken(t *testing.T) {
+	t.Parallel()
 	p := magiclink.New(magiclink.Options{
 		SendMagicLink: func(_ context.Context, _, _ string) error { return nil },
 		BaseURL:       "http://localhost",
@@ -163,6 +167,7 @@ func TestMagicLink_InvalidToken(t *testing.T) {
 }
 
 func TestMagicLink_MissingEmail(t *testing.T) {
+	t.Parallel()
 	p := magiclink.New(magiclink.Options{
 		SendMagicLink: func(_ context.Context, _, _ string) error { return nil },
 		BaseURL:       "http://localhost",
