@@ -7,8 +7,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	betterauth "github.com/jeromesth/go-better-auth"
+	"github.com/jeromesth/go-better-auth/adapter"
 	"github.com/jeromesth/go-better-auth/adapter/memory"
 	"github.com/jeromesth/go-better-auth/plugin"
 	"github.com/jeromesth/go-better-auth/plugins/apikey"
@@ -209,5 +211,48 @@ func TestAPIKey_RequiresAuth(t *testing.T) {
 	rr := postJSON(t, h, "/api/auth/api-key/create", map[string]string{"name": "x"}, nil)
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 without auth, got %d", rr.Code)
+	}
+}
+
+func TestVerifyAPIKey_UpdatesLastUsed(t *testing.T) {
+	p := apikey.New(apikey.Options{Prefix: "ak_"})
+	auth, h := newTestAuth(t, p)
+	cookies := signUp(t, h)
+
+	// Create a key
+	rr := postJSON(t, h, "/api/auth/api-key/create", map[string]string{"name": "test"}, cookies)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("create: %d %s", rr.Code, rr.Body.String())
+	}
+	var createResp map[string]any
+	json.NewDecoder(rr.Body).Decode(&createResp)
+	keyID := createResp["id"].(string)
+	fullKey := createResp["key"].(string)
+
+	// Verify the key (this triggers the goroutine)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/api-key/verify", nil)
+	req.Header.Set("Authorization", "Bearer "+fullKey)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("verify: %d %s", w.Code, w.Body.String())
+	}
+
+	// Give goroutine time to complete
+	time.Sleep(50 * time.Millisecond)
+
+	// Check last_used_at was updated via the raw adapter
+	adp := auth.InternalAdapter().Adapter()
+	records, err := adp.FindMany(t.Context(), "apiKey", adapter.Query{
+		Where: []adapter.Where{adapter.EQ("id", keyID)},
+	})
+	if err != nil {
+		t.Fatalf("FindMany: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(records))
+	}
+	if records[0]["last_used_at"] == nil {
+		t.Error("last_used_at should be set after verify, but was nil")
 	}
 }

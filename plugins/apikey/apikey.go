@@ -3,6 +3,7 @@
 package apikey
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -201,7 +202,7 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go p.repo.touchLastUsed(r.Context(), rec["id"].(string))
+	go p.repo.touchLastUsed(context.WithoutCancel(r.Context()), rec["id"].(string))
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"valid":   true,
