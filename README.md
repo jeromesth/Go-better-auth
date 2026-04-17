@@ -50,7 +50,7 @@ Go Better Auth is a Go port of the [better-auth](https://github.com/better-auth/
 - Database adapters: in-memory (testing) + sqlx (PostgreSQL, MySQL, SQLite)
 - Username-based authentication
 - Email OTP (one-time password) authentication
-- Framework adapters: Chi, Gin, Echo (and stdlib net/http natively)
+- Framework adapters: Chi, Gin, Echo, Fiber (and stdlib net/http natively)
 - Admin plugin (RBAC, user management, impersonation)
 - Organization plugin (multi-tenancy, members, invitations)
 
