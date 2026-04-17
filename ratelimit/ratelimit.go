@@ -11,15 +11,17 @@ import (
 // Config holds the configuration for a RateLimiter.
 type Config struct {
 	Limit  int           // max requests per window
-	Window time.Duration // length of the sliding window
+	Window time.Duration // length of each fixed window
 }
 
-// RateLimiter is a sliding-window rate limiter keyed by an arbitrary string.
+// RateLimiter is a fixed-window rate limiter keyed by an arbitrary string.
+// Each key gets a counter that resets after Window duration from the first hit.
 type RateLimiter struct {
-	mu      sync.Mutex
-	entries map[string]*entry
-	window  time.Duration
-	limit   int
+	mu        sync.Mutex
+	entries   map[string]*entry
+	window    time.Duration
+	limit     int
+	lastEvict time.Time
 }
 
 type entry struct {
@@ -43,20 +45,30 @@ func (rl *RateLimiter) Allow(key string) bool {
 
 	now := time.Now()
 
-	// Evict expired entries if map is getting large.
-	if len(rl.entries) > 10000 {
+	// Periodic full sweep: once per window, evict all expired entries to bound
+	// memory over time without paying O(n) on every call.
+	if now.After(rl.lastEvict.Add(rl.window)) {
 		for k, e := range rl.entries {
 			if now.After(e.resetAt) {
 				delete(rl.entries, k)
 			}
 		}
+		rl.lastEvict = now
 	}
 
 	e, ok := rl.entries[key]
-	if !ok || now.After(e.resetAt) {
+	if !ok {
 		rl.entries[key] = &entry{count: 1, resetAt: now.Add(rl.window)}
 		return true
 	}
+
+	// Lazy eviction on touch: if the entry is expired, reset it in place.
+	if now.After(e.resetAt) {
+		e.count = 1
+		e.resetAt = now.Add(rl.window)
+		return true
+	}
+
 	e.count++
 	return e.count <= rl.limit
 }
