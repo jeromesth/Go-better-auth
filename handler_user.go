@@ -3,6 +3,7 @@ package betterauth
 import (
 	"net/http"
 
+	"github.com/jeromesth/go-better-auth/internal/httputil"
 	"github.com/jeromesth/go-better-auth/session"
 )
 
@@ -21,7 +22,8 @@ func (a *Auth) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req map[string]any
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
 		return
 	}
 
@@ -34,7 +36,7 @@ func (a *Auth) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(updates) == 0 {
-		writeError(w, http.StatusBadRequest, "NO_UPDATES", "No valid fields to update")
+		httputil.WriteError(w, http.StatusBadRequest, "NO_UPDATES", "No valid fields to update")
 		return
 	}
 
@@ -44,7 +46,7 @@ func (a *Auth) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"user": user})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"user": user})
 }
 
 func (a *Auth) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +67,7 @@ func (a *Auth) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	userCfg := a.opts.User
 
 	if userCfg != nil && userCfg.DeleteUser != nil && !userCfg.DeleteUser.Enabled {
-		writeError(w, http.StatusForbidden, "DELETE_DISABLED", "Account deletion is disabled")
+		httputil.WriteError(w, http.StatusForbidden, "DELETE_DISABLED", "Account deletion is disabled")
 		return
 	}
 
@@ -77,7 +79,7 @@ func (a *Auth) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 
 	if userCfg != nil && userCfg.DeleteUser != nil && userCfg.DeleteUser.BeforeDelete != nil {
 		if err := userCfg.DeleteUser.BeforeDelete(*user, r); err != nil {
-			writeError(w, http.StatusForbidden, "DELETE_FORBIDDEN", err.Error())
+			httputil.WriteError(w, http.StatusForbidden, "DELETE_FORBIDDEN", err.Error())
 			return
 		}
 	}
@@ -94,5 +96,5 @@ func (a *Auth) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		_ = userCfg.DeleteUser.AfterDelete(*user, r)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+	httputil.WriteJSON(w, http.StatusOK, map[string]bool{"success": true})
 }

@@ -210,14 +210,14 @@ func (p *Plugin) withMethod(method string, h http.HandlerFunc) http.HandlerFunc 
 func (p *Plugin) getAuthenticatedUser(w http.ResponseWriter, r *http.Request) (userID string, sessRaw map[string]any, ok bool) {
 	token := session.GetSessionToken(r)
 	if token == "" {
-		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
 		return "", nil, false
 	}
 
 	ctx := r.Context()
 	sess, err := p.auth.SessionManager().FindByToken(ctx, token)
 	if err != nil || sess == nil || session.IsExpired(sess) {
-		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Unauthorized")
 		return "", nil, false
 	}
 
@@ -356,24 +356,6 @@ func recordToInvitation(r map[string]any) *Invitation {
 		inv.CreatedAt = v
 	}
 	return inv
-}
-
-// --- JSON helpers ---
-
-func writeError(w http.ResponseWriter, status int, code, message string) {
-	httputil.WriteError(w, status, code, message)
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	httputil.WriteJSON(w, status, v)
-}
-
-func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
-	if err := httputil.DecodeJSON(r, v); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
-		return false
-	}
-	return true
 }
 
 // parseRoles converts a role value (string or []string) to a comma-separated string.

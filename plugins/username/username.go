@@ -89,11 +89,11 @@ type signInRequest struct {
 func (p *Plugin) handleSignUp(w http.ResponseWriter, r *http.Request) {
 	var req signUpRequest
 	if r.Body == nil {
-		writeErr(w, http.StatusBadRequest, "INVALID_REQUEST", "Request body required")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_REQUEST", "Request body required")
 		return
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
 		return
 	}
 
@@ -101,15 +101,15 @@ func (p *Plugin) handleSignUp(w http.ResponseWriter, r *http.Request) {
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
 	if err := p.validateUsername(req.Username); err != nil {
-		writeErr(w, http.StatusBadRequest, "INVALID_USERNAME", err.Error())
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_USERNAME", err.Error())
 		return
 	}
 	if req.Email == "" {
-		writeErr(w, http.StatusBadRequest, "MISSING_EMAIL", "email is required")
+		httputil.WriteError(w, http.StatusBadRequest, "MISSING_EMAIL", "email is required")
 		return
 	}
 	if req.Password == "" {
-		writeErr(w, http.StatusBadRequest, "MISSING_PASSWORD", "password is required")
+		httputil.WriteError(w, http.StatusBadRequest, "MISSING_PASSWORD", "password is required")
 		return
 	}
 
@@ -119,28 +119,28 @@ func (p *Plugin) handleSignUp(w http.ResponseWriter, r *http.Request) {
 	// Check username uniqueness.
 	existing, err := p.findUserByUsername(ctx, ia, req.Username)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
 		return
 	}
 	if existing != nil {
-		writeErr(w, http.StatusConflict, "USERNAME_TAKEN", "Username is already taken")
+		httputil.WriteError(w, http.StatusConflict, "USERNAME_TAKEN", "Username is already taken")
 		return
 	}
 
 	// Check email uniqueness.
 	existingEmail, err := ia.FindUserByEmail(ctx, req.Email)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
 		return
 	}
 	if existingEmail != nil {
-		writeErr(w, http.StatusConflict, "EMAIL_ALREADY_USED", "Email is already in use")
+		httputil.WriteError(w, http.StatusConflict, "EMAIL_ALREADY_USED", "Email is already in use")
 		return
 	}
 
 	hash, err := crypto.HashPassword(req.Password)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
 		return
 	}
 
@@ -155,21 +155,21 @@ func (p *Plugin) handleSignUp(w http.ResponseWriter, r *http.Request) {
 		return p.auth.RunUserCreateHooks(data)
 	})
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
 		return
 	}
 
 	if _, err = ia.CreateAccount(ctx, user.ID, user.ID, "credential", map[string]any{
 		"password": hash,
 	}); err != nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
 		return
 	}
 
 	// Run session-create hooks.
 	if err := p.auth.RunSessionCreateHooks(w, r, user.ID); err != nil {
 		if !errors.Is(err, plugin.ErrHandled) {
-			writeErr(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+			httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
 		}
 		return
 	}
@@ -178,12 +178,12 @@ func (p *Plugin) handleSignUp(w http.ResponseWriter, r *http.Request) {
 	ua := r.UserAgent()
 	sess, err := p.auth.SessionManager().Create(ctx, user.ID, ip, ua)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
 		return
 	}
 
 	session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, p.auth.IsSecure())
-	writeJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"user":    user,
 		"session": sess,
 	})
@@ -192,17 +192,17 @@ func (p *Plugin) handleSignUp(w http.ResponseWriter, r *http.Request) {
 func (p *Plugin) handleSignIn(w http.ResponseWriter, r *http.Request) {
 	var req signInRequest
 	if r.Body == nil {
-		writeErr(w, http.StatusBadRequest, "INVALID_REQUEST", "Request body required")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_REQUEST", "Request body required")
 		return
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
 		return
 	}
 
 	req.Username = strings.TrimSpace(req.Username)
 	if req.Username == "" {
-		writeErr(w, http.StatusBadRequest, "MISSING_USERNAME", "username is required")
+		httputil.WriteError(w, http.StatusBadRequest, "MISSING_USERNAME", "username is required")
 		return
 	}
 
@@ -211,17 +211,17 @@ func (p *Plugin) handleSignIn(w http.ResponseWriter, r *http.Request) {
 
 	user, err := p.findUserByUsername(ctx, ia, req.Username)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
 		return
 	}
 	if user == nil {
-		writeErr(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Invalid username or password")
+		httputil.WriteError(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Invalid username or password")
 		return
 	}
 
 	accounts, err := ia.FindAccountsByUserID(ctx, user.ID)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
 		return
 	}
 
@@ -233,19 +233,19 @@ func (p *Plugin) handleSignIn(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if hash == "" {
-		writeErr(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Invalid username or password")
+		httputil.WriteError(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Invalid username or password")
 		return
 	}
 
 	ok, err := crypto.VerifyPassword(hash, req.Password)
 	if err != nil || !ok {
-		writeErr(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Invalid username or password")
+		httputil.WriteError(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Invalid username or password")
 		return
 	}
 
 	if err := p.auth.RunSessionCreateHooks(w, r, user.ID); err != nil {
 		if !errors.Is(err, plugin.ErrHandled) {
-			writeErr(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+			httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
 		}
 		return
 	}
@@ -254,12 +254,12 @@ func (p *Plugin) handleSignIn(w http.ResponseWriter, r *http.Request) {
 	ua := r.UserAgent()
 	sess, err := p.auth.SessionManager().Create(ctx, user.ID, ip, ua)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
 		return
 	}
 
 	session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, p.auth.IsSecure())
-	writeJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"user":    user,
 		"session": sess,
 	})
@@ -314,12 +314,4 @@ func (p *Plugin) withMethod(method string, h http.HandlerFunc) http.HandlerFunc 
 		}
 		h(w, r)
 	}
-}
-
-func writeErr(w http.ResponseWriter, status int, code, message string) {
-	httputil.WriteError(w, status, code, message)
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	httputil.WriteJSON(w, status, v)
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/jeromesth/go-better-auth/crypto"
 	"github.com/jeromesth/go-better-auth/internal"
+	"github.com/jeromesth/go-better-auth/internal/httputil"
 	"github.com/jeromesth/go-better-auth/plugin"
 	"github.com/jeromesth/go-better-auth/session"
 )
@@ -18,7 +19,8 @@ type signInEmailRequest struct {
 
 func (a *Auth) handleSignInEmail(w http.ResponseWriter, r *http.Request) {
 	var req signInEmailRequest
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
 		return
 	}
 
@@ -84,7 +86,7 @@ func (a *Auth) handleSignInEmail(w http.ResponseWriter, r *http.Request) {
 	// Run session-create hooks (e.g., ban check from admin plugin).
 	if err := a.RunSessionCreateHooks(w, r, user.ID); err != nil {
 		if !errors.Is(err, plugin.ErrHandled) {
-			writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+			httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
 		}
 		return
 	}
@@ -98,7 +100,7 @@ func (a *Auth) handleSignInEmail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, a.isSecure())
-	writeJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"user":    user,
 		"session": sess,
 	})

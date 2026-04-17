@@ -75,16 +75,16 @@ func (p *Plugin) handleSend(w http.ResponseWriter, r *http.Request) {
 		Email string `json:"email"`
 	}
 	if r.Body == nil {
-		writeErr(w, http.StatusBadRequest, "INVALID_REQUEST", "Request body required")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_REQUEST", "Request body required")
 		return
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
 		return
 	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 	if req.Email == "" {
-		writeErr(w, http.StatusBadRequest, "MISSING_EMAIL", "email is required")
+		httputil.WriteError(w, http.StatusBadRequest, "MISSING_EMAIL", "email is required")
 		return
 	}
 
@@ -93,30 +93,30 @@ func (p *Plugin) handleSend(w http.ResponseWriter, r *http.Request) {
 
 	user, err := ia.FindUserByEmail(ctx, req.Email)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
 		return
 	}
 	// Don't reveal whether the email exists — silently succeed.
 	if user == nil {
-		writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+		httputil.WriteJSON(w, http.StatusOK, map[string]bool{"success": true})
 		return
 	}
 
 	code, err := generateOTP(p.opts.CodeLength)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to generate code")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to generate code")
 		return
 	}
 
 	// Hash the OTP before storing it so it's not in plaintext.
 	hashedCode, err := crypto.HashPassword(code)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal error")
 		return
 	}
 
 	if _, err = ia.CreateVerification(ctx, identifierPrefix+req.Email, hashedCode, p.opts.TokenExpiry); err != nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to store code")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to store code")
 		return
 	}
 
@@ -126,7 +126,7 @@ func (p *Plugin) handleSend(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+	httputil.WriteJSON(w, http.StatusOK, map[string]bool{"success": true})
 }
 
 // handleVerify validates the OTP code and creates a session.
@@ -136,17 +136,17 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 		Code  string `json:"code"`
 	}
 	if r.Body == nil {
-		writeErr(w, http.StatusBadRequest, "INVALID_REQUEST", "Request body required")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_REQUEST", "Request body required")
 		return
 	}
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		writeErr(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
+		httputil.WriteError(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body")
 		return
 	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 	req.Code = strings.TrimSpace(req.Code)
 	if req.Email == "" || req.Code == "" {
-		writeErr(w, http.StatusBadRequest, "MISSING_FIELDS", "email and code are required")
+		httputil.WriteError(w, http.StatusBadRequest, "MISSING_FIELDS", "email and code are required")
 		return
 	}
 
@@ -155,25 +155,25 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 
 	verif, err := p.findVerificationByIdentifier(ctx, identifierPrefix+req.Email)
 	if err != nil || verif == nil {
-		writeErr(w, http.StatusUnauthorized, "INVALID_CODE", "Invalid or expired code")
+		httputil.WriteError(w, http.StatusUnauthorized, "INVALID_CODE", "Invalid or expired code")
 		return
 	}
 	if time.Now().After(verif.ExpiresAt) {
 		_ = ia.DeleteVerification(ctx, verif.ID)
-		writeErr(w, http.StatusUnauthorized, "CODE_EXPIRED", "Code has expired")
+		httputil.WriteError(w, http.StatusUnauthorized, "CODE_EXPIRED", "Code has expired")
 		return
 	}
 
 	// Verify the hashed OTP.
 	ok, err := crypto.VerifyPassword(verif.Value, req.Code)
 	if err != nil || !ok {
-		writeErr(w, http.StatusUnauthorized, "INVALID_CODE", "Invalid or expired code")
+		httputil.WriteError(w, http.StatusUnauthorized, "INVALID_CODE", "Invalid or expired code")
 		return
 	}
 
 	user, err := ia.FindUserByEmail(ctx, req.Email)
 	if err != nil || user == nil {
-		writeErr(w, http.StatusUnauthorized, "USER_NOT_FOUND", "User not found")
+		httputil.WriteError(w, http.StatusUnauthorized, "USER_NOT_FOUND", "User not found")
 		return
 	}
 
@@ -183,7 +183,7 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 	// Run session create hooks.
 	if err := p.auth.RunSessionCreateHooks(w, r, user.ID); err != nil {
 		if !errors.Is(err, plugin.ErrHandled) {
-			writeErr(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+			httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
 		}
 		return
 	}
@@ -192,12 +192,12 @@ func (p *Plugin) handleVerify(w http.ResponseWriter, r *http.Request) {
 	ua := r.UserAgent()
 	sess, err := p.auth.SessionManager().Create(ctx, user.ID, ip, ua)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create session")
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create session")
 		return
 	}
 
 	session.SetSessionCookie(w, sess.Token, sess.ExpiresAt, p.auth.IsSecure())
-	writeJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"user":    user,
 		"session": sess,
 	})
@@ -252,12 +252,4 @@ func (p *Plugin) withMethod(method string, h http.HandlerFunc) http.HandlerFunc 
 		}
 		h(w, r)
 	}
-}
-
-func writeErr(w http.ResponseWriter, status int, code, message string) {
-	httputil.WriteError(w, status, code, message)
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	httputil.WriteJSON(w, status, v)
 }

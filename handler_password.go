@@ -7,6 +7,7 @@ import (
 
 	"github.com/jeromesth/go-better-auth/crypto"
 	"github.com/jeromesth/go-better-auth/internal"
+	"github.com/jeromesth/go-better-auth/internal/httputil"
 	"github.com/jeromesth/go-better-auth/session"
 )
 
@@ -29,7 +30,8 @@ func (a *Auth) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		NewPassword         string `json:"newPassword"`
 		RevokeOtherSessions bool   `json:"revokeOtherSessions"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
 		return
 	}
 
@@ -99,7 +101,7 @@ func (a *Auth) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		_ = a.sessionManager.RevokeAllForUser(ctx, sess.UserID, token)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+	httputil.WriteJSON(w, http.StatusOK, map[string]bool{"success": true})
 }
 
 func (a *Auth) handleRequestPasswordReset(w http.ResponseWriter, r *http.Request) {
@@ -107,7 +109,8 @@ func (a *Auth) handleRequestPasswordReset(w http.ResponseWriter, r *http.Request
 		Email       string `json:"email"`
 		RedirectURI string `json:"redirectURI"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
 		return
 	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
@@ -132,7 +135,7 @@ func (a *Auth) handleRequestPasswordReset(w http.ResponseWriter, r *http.Request
 	}
 	// Don't reveal whether user exists.
 	if user == nil {
-		writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+		httputil.WriteJSON(w, http.StatusOK, map[string]bool{"success": true})
 		return
 	}
 
@@ -157,7 +160,7 @@ func (a *Auth) handleRequestPasswordReset(w http.ResponseWriter, r *http.Request
 		}, r)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+	httputil.WriteJSON(w, http.StatusOK, map[string]bool{"success": true})
 }
 
 func (a *Auth) handleResetPassword(w http.ResponseWriter, r *http.Request) {
@@ -165,7 +168,8 @@ func (a *Auth) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 		Token    string `json:"token"`
 		Password string `json:"newPassword"`
 	}
-	if !decodeJSON(w, r, &req) {
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid_body", "Invalid request body")
 		return
 	}
 
@@ -248,5 +252,5 @@ func (a *Auth) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+	httputil.WriteJSON(w, http.StatusOK, map[string]bool{"success": true})
 }
