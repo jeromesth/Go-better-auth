@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://pkg.go.dev/github.com/jeromesth/go-better-auth"><img src="https://pkg.go.dev/badge/github.com/jeromesth/go-better-auth.svg" alt="Go Reference"></a>
-  <a href="https://github.com/jeromesth/Go-better-auth/blob/main/LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License"></a>
+  <a href="https://github.com/jeromesth/Go-better-auth/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License"></a>
   <a href="https://github.com/jeromesth/Go-better-auth/stargazers"><img src="https://img.shields.io/github/stars/jeromesth/Go-better-auth?style=flat-square" alt="GitHub Stars"></a>
   <a href="https://github.com/jeromesth/Go-better-auth/actions/workflows/ci.yml"><img src="https://github.com/jeromesth/Go-better-auth/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
@@ -193,4 +193,4 @@ If you discover a security vulnerability, please report it responsibly. See [SEC
 
 ## License
 
-[MIT](LICENSE.md)
+[MIT](LICENSE)

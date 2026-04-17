@@ -2,24 +2,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in Go Better Auth, please report it responsibly.
-
-**Do NOT open a public GitHub issue for security vulnerabilities.**
-
-Instead, please email: **security@go-better-auth.dev**
-
-### What to Include
-
-- Description of the vulnerability
-- Steps to reproduce
-- Potential impact
-- Suggested fix (if any)
-
-### Response Timeline
-
-- **72 hours** - Initial acknowledgment
-- **7 days** - Assessment and severity classification
-- **90 days** - Coordinated disclosure deadline
+This is a portfolio/learning project. For any security concerns, please open a [GitHub issue](https://github.com/jeromesth/Go-better-auth/issues) or use GitHub's [private vulnerability reporting](https://github.com/jeromesth/Go-better-auth/security/advisories/new).
 
 ## Supported Versions
 
