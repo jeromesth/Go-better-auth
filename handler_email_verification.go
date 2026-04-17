@@ -43,6 +43,10 @@ func (a *Auth) handleSendVerificationEmail(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if user == nil {
+		// Return early with the same response as a known email to prevent status-code enumeration.
+		// Note: timing still differs slightly (unknown returns immediately, known triggers token
+		// generation and storage). For high-security deployments, equalise timing with a constant-
+		// time response or deferred goroutine.
 		httputil.WriteJSON(w, http.StatusOK, map[string]bool{"success": true})
 		return
 	}
