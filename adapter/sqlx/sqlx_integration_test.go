@@ -1,5 +1,10 @@
 //go:build integration
 
+// To run locally:
+//
+//	docker compose -f docker-compose.dev.yml up -d
+//	TEST_POSTGRES_DSN=postgres://test:test@localhost:5433/testdb?sslmode=disable go test -tags=integration ./adapter/sqlx/...
+
 package sqlxadapter_test
 
 import (
