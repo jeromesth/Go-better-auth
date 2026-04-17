@@ -45,7 +45,11 @@ func New(opts Options) *Plugin {
 func (p *Plugin) ID() string { return "jwt" }
 
 func (p *Plugin) SetAuth(auth any) {
-	p.auth = auth.(*betterauth.Auth)
+	a, ok := auth.(*betterauth.Auth)
+	if !ok {
+		return
+	}
+	p.auth = a
 }
 
 // SessionCreateHooks returns a hook that appends a signed JWT to the response

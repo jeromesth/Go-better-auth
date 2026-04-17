@@ -49,7 +49,11 @@ func New(opts Options) *Plugin {
 func (p *Plugin) ID() string { return "anonymous" }
 
 func (p *Plugin) SetAuth(auth any) {
-	p.auth = auth.(*betterauth.Auth)
+	a, ok := auth.(*betterauth.Auth)
+	if !ok {
+		return
+	}
+	p.auth = a
 }
 
 // Schema extends the user table with an is_anonymous field.
